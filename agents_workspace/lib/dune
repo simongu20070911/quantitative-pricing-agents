@@ -1,0 +1,9 @@
+
+(library
+ (name strategy_fast)
+ (public_name qpa.strategy_fast)
+ (libraries core cairo2 yojson)
+ (preprocess (pps ppx_jane))
+ (wrapped true))
+
+(include_subdirs unqualified)

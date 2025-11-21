@@ -1,0 +1,22 @@
+{
+  "defaults": {
+    "min_trades": 300,
+    "max_trial_runs": 200,
+    "pvalue_threshold": 0.025,
+    "bootstrap_ci_target": 0.0,
+    "max_drawdown_R": 15.0,
+    "robustness_tolerance": 0.7,
+    "robustness_tol_frac": 0.9,
+    "cliff_pct": 0.2,
+    "capacity_impact_bps": 2.0
+  },
+  "overrides": {
+    "vwap_revert": {
+      "min_trades": 2000,
+      "pvalue_threshold": 0.05
+    },
+    "b1b2": {
+      "min_trades": 200
+    }
+  }
+}

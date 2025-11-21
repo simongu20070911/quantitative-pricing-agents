@@ -1,0 +1,20 @@
+(executable
+ (name strategy_fast_main)
+ (modules strategy_fast_main)
+ (public_name strategy_fast)
+(libraries core core_unix strategy_fast)
+ (preprocess (pps ppx_jane)))
+
+(executable
+ (name vwap_revert_main)
+ (modules vwap_revert_main)
+ (public_name vwap_revert)
+(libraries core core_unix strategy_fast)
+ (preprocess (pps ppx_jane)))
+
+(executable
+ (name optimize_main)
+ (modules optimize_main)
+ (public_name strategy_optimize)
+ (libraries core core_unix strategy_fast yojson)
+ (preprocess (pps ppx_jane)))

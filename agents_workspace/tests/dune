@@ -1,0 +1,5 @@
+(library
+ (name strategy_fast_tests)
+ (inline_tests)
+ (libraries core strategy_fast)
+ (preprocess (pps ppx_jane)))

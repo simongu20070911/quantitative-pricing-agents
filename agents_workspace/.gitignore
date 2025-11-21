@@ -22,7 +22,6 @@ _build/
 
 # local data / notebooks
 *.ipynb_checkpoints
-*.csv
 
-# kept local: nested repo metadata
-agents_workspace/.git.pricing_logic_optimization
+# internal git metadata for pricing_logic_optimization mirror
+.git.pricing_logic_optimization
