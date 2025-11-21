@@ -1,0 +1,4 @@
+(executable
+ (name strategy_fast)
+ (modules strategy_fast)
+ (libraries core))

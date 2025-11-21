@@ -1,0 +1,3 @@
+This repo is about an experimental step in constructing an AI research environment. the AGENTS.md features a structured environmental setup where the agents are forced to keep inventory, use a functional programming language that's compile-first.
+
+the Agentsworkspace folder includes a strategy folder, sitting in a optimization framework, with event based filtering. backtesting is conducted in a streaming logic. 

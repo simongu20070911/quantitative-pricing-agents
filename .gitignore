@@ -1,0 +1,25 @@
+# build artifacts
+_build/
+*.install
+*.exe
+
+# dune/ocaml compiler outputs
+*.cmo
+*.cmi
+*.cma
+*.cmx
+*.cmxa
+*.o
+*.obj
+*.annot
+*.byte
+*.native
+
+# editors / tooling
+.merlin
+.vscode/
+.DS_Store
+
+# local data / notebooks
+*.ipynb_checkpoints
+*.csv
