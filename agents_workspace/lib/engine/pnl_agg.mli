@@ -1,5 +1,6 @@
 (** Shared daily PnL accumulator for engines. *)
 
+open Core
 open Types
 
 type t = {

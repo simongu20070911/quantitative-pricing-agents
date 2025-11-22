@@ -94,6 +94,14 @@ modules:
     provides_values:
       - "apply : qty:float -> Cost_model.config -> Types.trade -> Types.trade"
 
+  - name: Trade_base
+    file_ml: agents_workspace/lib/core/trade_base.ml
+    file_mli: agents_workspace/lib/core/trade_base.mli
+    summary: Core trade constructors and cost application helpers.
+    provides_values:
+      - "make_raw : qty:float -> r_pts:float -> direction:Types.direction -> entry_ts:Types.timestamp -> entry_px:float -> exit_ts:Types.timestamp -> exit_px:float -> exit_reason:Types.exit_reason -> meta:(string * string) list -> Types.trade"
+      - "apply_costs : qty:float -> Cost_model.config -> Types.trade -> Types.trade"
+
   - name: Summary
     file_ml: agents_workspace/lib/core/summary.ml
     file_mli: agents_workspace/lib/core/summary.mli
@@ -104,136 +112,6 @@ modules:
       - "print_sample_trades : Types.trade list -> int -> unit"
       - "export_trades_csv : outfile:string -> trades:Types.trade list -> unit"
       - "export_daily_csv : outfile:string -> daily:(Date.t * float) list -> ?daily_usd:(Date.t * float) list -> ?daily_pct:(Date.t * float) list -> unit -> unit"
-
-  - name: Indicators
-    file_ml: agents_workspace/lib/features/indicators.ml
-    file_mli: agents_workspace/lib/features/indicators.mli
-    summary: Rolling ABR/ADR feature calculators.
-    provides_types:
-      - Indicators.Abr.t
-      - Indicators.Adr.t
-    provides_values:
-      - "Abr.create : n:int -> Indicators.Abr.t"
-      - "Abr.update : Indicators.Abr.t -> float -> unit"
-      - "Abr.value : Indicators.Abr.t -> float option"
-      - "Adr.create : n:int -> Indicators.Adr.t"
-      - "Adr.update : Indicators.Adr.t -> float -> unit"
-      - "Adr.value : Indicators.Adr.t -> float option"
-
-  - name: Features
-    file_ml: agents_workspace/lib/features/features.ml
-    file_mli: agents_workspace/lib/features/features.mli
-    summary: Maintains rolling intraday VWAP/OFI/volatility/overnight feature set.
-    provides_types:
-      - Features.state
-      - Features.snapshot
-    provides_values:
-      - "create : unit -> Features.state"
-      - "update : Features.state -> Types.bar_1m -> Features.state"
-      - "snapshot : Features.state -> Features.snapshot"
-
-  - name: Strategy_common
-    file_ml: agents_workspace/lib/strategies/strategy_common.ml
-    file_mli: agents_workspace/lib/strategies/strategy_common.mli
-    summary: Shared trade construction, cost/session parameter helpers, tunable surfaces, and setup utilities.
-    provides_types:
-      - Strategy_common.Tunables.env_defaults
-      - Strategy_common.Tunables.param_field
-    provides_values:
-      - "Trade.make : qty:float -> ?r_pts:float -> Cost_model.config -> Types.direction -> entry_ts:Types.timestamp -> entry_px:float -> exit_ts:Types.timestamp -> exit_px:float -> reason:Types.exit_reason -> meta:(string * string) list -> Types.trade"
-      - "Config.cost_params : Cost_model.config -> Parameters.t list"
-      - "Config.cost_of_params : defaults:Cost_model.config -> Parameters.value_map -> Cost_model.config"
-      - "Config.session_params : default_start:int -> default_end:int -> Parameters.t list"
-      - "Config.session_of_params : defaults:(int * int) -> Parameters.value_map -> int * int"
-      - "Tunables.env_specs : defaults:Strategy_common.Tunables.env_defaults -> Parameters.t list"
-      - "Tunables.env_of_params : defaults:Strategy_common.Tunables.env_defaults -> Parameters.value_map -> Strategy_common.Tunables.env_defaults"
-      - "Tunables.parameter_specs_of_table : 'p Strategy_common.Tunables.param_field list -> Parameters.t list"
-      - "Tunables.params_of_table : defaults:'p -> param_table:'p Strategy_common.Tunables.param_field list -> Parameters.value_map -> 'p"
-      - "Tunables.make : defaults_env:Strategy_common.Tunables.env_defaults -> defaults_params:'p -> param_table:'p Strategy_common.Tunables.param_field list -> Parameters.t list * (Parameters.value_map -> Strategy_common.Tunables.env_defaults * 'p)"
-      - "Env.of_config : session_start_min:int -> session_end_min:int -> qty:float -> cost:Cost_model.config -> Strategy_sig.env"
-      - "Session.within : start:int -> end_:int -> Types.bar_1m -> bool"
-      - "Session.eod_flat : qty:float -> ?r_pts:float -> Cost_model.config -> direction:Types.direction -> entry_ts:Types.timestamp -> entry_px:float -> last_bar:Types.bar_1m -> meta:(string * string) list -> Types.trade"
-      - "Setup.noop : string -> Types.setup Core.Date.Table.t"
-      - "Setups.with_params : params:'p -> ('p -> string -> Types.setup Core.Date.Table.t) -> string -> Types.setup Core.Date.Table.t"
-      - "Strategy_builder.make_pure : id:string -> env:Strategy_sig.env -> ?build_setups:(string -> Types.setup Core.Date.Table.t) -> (module Strategy_sig.S) -> Engine.pure_strategy"
-
-  - name: B1b2_params
-    file_ml: agents_workspace/lib/strategies/b1b2_params.ml
-    file_mli: agents_workspace/lib/strategies/b1b2_params.mli
-    summary: Single source of B1/B2 constants and tunables with parameter specs and overrides.
-    provides_types:
-      - B1b2_params.t
-      - B1b2_params.field
-    provides_values:
-      - defaults : B1b2_params.t
-      - param_table : B1b2_params.field list
-      - parameter_specs : Parameters.t list
-      - "apply_overrides : Parameters.value_map -> B1b2_params.t -> B1b2_params.t"
-
-  - name: Setup_builder_b1b2
-    file_ml: agents_workspace/lib/strategies/setup_builder_b1b2.ml
-    file_mli: agents_workspace/lib/strategies/setup_builder_b1b2.mli
-    summary: Build B1/B2 daily setups and macro context from 1-minute bars, parameterized by B1b2_params.
-    provides_values:
-      - "compute_daily_context_and_setups : string -> Types.setup Core.Date.Table.t"
-      - "compute_daily_context_and_setups_with_params : B1b2_params.t -> string -> Types.setup Core.Date.Table.t"
-
-  - name: Trade_logic
-    file_ml: agents_workspace/lib/strategies/trade_logic.ml
-    file_mli: null
-    summary: Build B1/B2 trade plans from daily setup context and tunable params.
-    provides_values:
-      - "build_trade_plan : params:B1b2_params.t -> Types.setup -> Types.trade_plan option"
-
-  - name: Strategy_b1b2
-    file_ml: agents_workspace/lib/strategies/strategy_b1b2.ml
-    file_mli: agents_workspace/lib/strategies/strategy_b1b2.mli
-    summary: Pure strategy wrapper for classic B1/B2 setup with session/qty/cost tuning and param overrides.
-    provides_types:
-      - Strategy_b1b2.config
-    provides_values:
-      - default_config : Strategy_b1b2.config
-      - strategy_id : string
-      - "parameter_specs : Parameters.t list"
-      - "config_of_params : Parameters.value_map -> Strategy_b1b2.config"
-      - "session_window : Strategy_b1b2.config -> int * int"
-      - "qty : Strategy_b1b2.config -> float"
-      - "cost : Strategy_b1b2.config -> Cost_model.config"
-      - "with_params : params:B1b2_params.t -> Strategy_b1b2.config -> Strategy_b1b2.config"
-      - "with_cost : cost:Cost_model.config -> Strategy_b1b2.config -> Strategy_b1b2.config"
-      - "with_qty : qty:float -> Strategy_b1b2.config -> Strategy_b1b2.config"
-      - "with_session : start:int -> end_:int -> Strategy_b1b2.config -> Strategy_b1b2.config"
-      - "params : Strategy_b1b2.config -> B1b2_params.t"
-      - "pure_strategy : Strategy_b1b2.config -> Engine.pure_strategy"
-      - strategy_pure : Engine.pure_strategy
-
-  - name: Vwap_revert_strategy
-    file_ml: agents_workspace/lib/strategies/vwap_revert_strategy.ml
-    file_mli: agents_workspace/lib/strategies/vwap_revert_strategy.mli
-    summary: VWAP mean-reversion strategy with volatility targeting and cost model.
-    provides_types:
-      - Vwap_revert_strategy.config
-    provides_values:
-      - default_config : Vwap_revert_strategy.config
-      - strategy_id : string
-      - "parameter_specs : Parameters.t list"
-      - "config_of_params : Parameters.value_map -> Vwap_revert_strategy.config"
-      - "session_window : Vwap_revert_strategy.config -> int * int"
-      - "qty : Vwap_revert_strategy.config -> float"
-      - "cost : Vwap_revert_strategy.config -> Cost_model.config"
-      - "with_cost : cost:Cost_model.config -> Vwap_revert_strategy.config -> Vwap_revert_strategy.config"
-      - "with_s_entry : s_entry:float -> Vwap_revert_strategy.config -> Vwap_revert_strategy.config"
-      - "with_z_exit : z_exit:float -> Vwap_revert_strategy.config -> Vwap_revert_strategy.config"
-      - "with_session : start:int -> end_:int -> Vwap_revert_strategy.config -> Vwap_revert_strategy.config"
-      - "with_qty : qty:float -> Vwap_revert_strategy.config -> Vwap_revert_strategy.config"
-      - "pure_strategy : Vwap_revert_strategy.config -> Engine.pure_strategy"
-      - strategy_pure : Engine.pure_strategy
-
-  - name: Strategy_fast
-    file_ml: agents_workspace/lib/strategy_fast.ml
-    file_mli: null
-    summary: Umbrella module re-exporting core, engine, feature, plot, and strategy modules for CLI builds.
-    provides_values: []
 
   - name: Policy_sig
     file_ml: agents_workspace/lib/engine/policy_sig.ml
@@ -291,6 +169,18 @@ modules:
       - "run_shared : Engine.strategy list -> filename:string -> Multi_engine.run_result list"
       - "run_shared_pure : Engine.pure_strategy list -> filename:string -> Multi_engine.run_result list"
 
+  - name: Pnl_agg
+    file_ml: agents_workspace/lib/engine/pnl_agg.ml
+    file_mli: agents_workspace/lib/engine/pnl_agg.mli
+    summary: Shared daily PnL accumulator for engine runners.
+    provides_types:
+      - Pnl_agg.t
+    provides_values:
+      - Pnl_agg.empty
+      - "add_trade : Pnl_agg.t -> Types.trade -> Pnl_agg.t"
+      - "add_trades : Pnl_agg.t -> Types.trade list -> Pnl_agg.t"
+      - "to_alists_unsorted : Pnl_agg.t -> (Date.t * float) list * (Date.t * float) list * (Date.t * float) list"
+
   - name: Opt_algos
     file_ml: agents_workspace/lib/engine/opt_algos.ml
     file_mli: agents_workspace/lib/engine/opt_algos.mli
@@ -334,6 +224,33 @@ modules:
     provides_values:
       - "run : Optimizer.job -> evaluate:(Parameters.value_map -> Optimizer.candidate) -> Optimizer.result"
 
+  - name: Indicators
+    file_ml: agents_workspace/lib/features/indicators.ml
+    file_mli: agents_workspace/lib/features/indicators.mli
+    summary: Rolling ABR/ADR feature calculators.
+    provides_types:
+      - Indicators.Abr.t
+      - Indicators.Adr.t
+    provides_values:
+      - "Abr.create : n:int -> Indicators.Abr.t"
+      - "Abr.update : Indicators.Abr.t -> float -> unit"
+      - "Abr.value : Indicators.Abr.t -> float option"
+      - "Adr.create : n:int -> Indicators.Adr.t"
+      - "Adr.update : Indicators.Adr.t -> float -> unit"
+      - "Adr.value : Indicators.Adr.t -> float option"
+
+  - name: Features
+    file_ml: agents_workspace/lib/features/features.ml
+    file_mli: agents_workspace/lib/features/features.mli
+    summary: Maintains rolling intraday VWAP/OFI/volatility/overnight feature set.
+    provides_types:
+      - Features.state
+      - Features.snapshot
+    provides_values:
+      - "create : unit -> Features.state"
+      - "update : Features.state -> Types.bar_1m -> Features.state"
+      - "snapshot : Features.state -> Features.snapshot"
+
   - name: Plotter
     file_ml: agents_workspace/lib/plot/plotter.ml
     file_mli: agents_workspace/lib/plot/plotter.mli
@@ -342,6 +259,133 @@ modules:
       - "render_equity : outfile:string -> trades:Types.trade list -> unit"
       - "render_daily_curve : outfile:string -> daily:(Date.t * float) list -> unit"
       - "render_histogram : outfile:string -> values:float array -> bins:int -> unit"
+
+  - name: Strategy_common
+    file_ml: agents_workspace/lib/strategies/common/strategy_common.ml
+    file_mli: agents_workspace/lib/strategies/common/strategy_common.mli
+    summary: Shared trade construction, cost/session parameter helpers, tunable surfaces, and setup utilities.
+    provides_types:
+      - Strategy_common.Tunables.env_defaults
+      - Strategy_common.Tunables.param_field
+    provides_values:
+      - "Trade.make : qty:float -> ?r_pts:float -> Cost_model.config -> Types.direction -> entry_ts:Types.timestamp -> entry_px:float -> exit_ts:Types.timestamp -> exit_px:float -> reason:Types.exit_reason -> meta:(string * string) list -> Types.trade"
+      - "Config.cost_params : Cost_model.config -> Parameters.t list"
+      - "Config.cost_of_params : defaults:Cost_model.config -> Parameters.value_map -> Cost_model.config"
+      - "Config.session_params : default_start:int -> default_end:int -> Parameters.t list"
+      - "Config.session_of_params : defaults:(int * int) -> Parameters.value_map -> int * int"
+      - "Tunables.env_specs : defaults:Strategy_common.Tunables.env_defaults -> Parameters.t list"
+      - "Tunables.env_of_params : defaults:Strategy_common.Tunables.env_defaults -> Parameters.value_map -> Strategy_common.Tunables.env_defaults"
+      - "Tunables.parameter_specs_of_table : 'p Strategy_common.Tunables.param_field list -> Parameters.t list"
+      - "Tunables.params_of_table : defaults:'p -> param_table:'p Strategy_common.Tunables.param_field list -> Parameters.value_map -> 'p"
+      - "Tunables.make : defaults_env:Strategy_common.Tunables.env_defaults -> defaults_params:'p -> param_table:'p Strategy_common.Tunables.param_field list -> Parameters.t list * (Parameters.value_map -> Strategy_common.Tunables.env_defaults * 'p)"
+      - "Env.of_config : session_start_min:int -> session_end_min:int -> qty:float -> cost:Cost_model.config -> Strategy_sig.env"
+      - "Session.within : start:int -> end_:int -> Types.bar_1m -> bool"
+      - "Session.eod_flat : qty:float -> ?r_pts:float -> Cost_model.config -> direction:Types.direction -> entry_ts:Types.timestamp -> entry_px:float -> last_bar:Types.bar_1m -> meta:(string * string) list -> Types.trade"
+      - "Setup.noop : string -> Types.setup Core.Date.Table.t"
+      - "Setups.with_params : params:'p -> ('p -> string -> Types.setup Core.Date.Table.t) -> string -> Types.setup Core.Date.Table.t"
+      - "Strategy_builder.make_pure : id:string -> env:Strategy_sig.env -> ?build_setups:(string -> Types.setup Core.Date.Table.t) -> (module Strategy_sig.S) -> Engine.pure_strategy"
+      - "Trade_common.with_strategy : string -> (string * string) list -> (string * string) list"
+
+  - name: B1b2_params
+    file_ml: agents_workspace/lib/strategies/b1b2/b1b2_params.ml
+    file_mli: agents_workspace/lib/strategies/b1b2/b1b2_params.mli
+    summary: Single source of B1/B2 setup and execution tunables with parameter specs and overrides.
+    provides_types:
+      - B1b2_params.Setup.t
+      - B1b2_params.Exec.t
+      - B1b2_params.t
+      - B1b2_params.field
+    provides_values:
+      - "Setup.param_table : B1b2_params.Setup.field list"
+      - "Setup.defaults : B1b2_params.Setup.t"
+      - "Setup.parameter_specs : Parameters.t list"
+      - "Setup.apply_overrides : Parameters.value_map -> B1b2_params.Setup.t -> B1b2_params.Setup.t"
+      - "Exec.param_table : B1b2_params.Exec.field list"
+      - "Exec.defaults : B1b2_params.Exec.t"
+      - "Exec.parameter_specs : Parameters.t list"
+      - "Exec.apply_overrides : Parameters.value_map -> B1b2_params.Exec.t -> B1b2_params.Exec.t"
+      - defaults : B1b2_params.t
+      - param_table : B1b2_params.field list
+      - parameter_specs : Parameters.t list
+      - "apply_overrides : Parameters.value_map -> B1b2_params.t -> B1b2_params.t"
+
+  - name: Setup_builder_b1b2
+    file_ml: agents_workspace/lib/strategies/b1b2/setup_builder_b1b2.ml
+    file_mli: agents_workspace/lib/strategies/b1b2/setup_builder_b1b2.mli
+    summary: Build B1/B2 daily setups and macro context from 1-minute bars, parameterized by B1b2_params.
+    provides_values:
+      - "build : B1b2_params.Setup.t -> string -> Types.setup Core.Date.Table.t"
+      - "build_with_defaults : string -> Types.setup Core.Date.Table.t"
+
+  - name: Trade_logic
+    file_ml: agents_workspace/lib/strategies/b1b2/trade_logic.ml
+    file_mli: null
+    summary: Build B1/B2 trade plans from daily setup context and exec params.
+    provides_values:
+      - "build_trade_plan : params:B1b2_params.Exec.t -> Types.setup -> Types.trade_plan option"
+
+  - name: Strategy_b1b2
+    file_ml: agents_workspace/lib/strategies/b1b2/strategy_b1b2.ml
+    file_mli: agents_workspace/lib/strategies/b1b2/strategy_b1b2.mli
+    summary: Pure strategy wrapper for classic B1/B2 setup with session/qty/cost tuning and param overrides.
+    provides_types:
+      - Strategy_b1b2.config
+    provides_values:
+      - default_config : Strategy_b1b2.config
+      - strategy_id : string
+      - "parameter_specs : Parameters.t list"
+      - "config_of_params : Parameters.value_map -> Strategy_b1b2.config"
+      - "session_window : Strategy_b1b2.config -> int * int"
+      - "qty : Strategy_b1b2.config -> float"
+      - "cost : Strategy_b1b2.config -> Cost_model.config"
+      - "with_params : params:B1b2_params.t -> Strategy_b1b2.config -> Strategy_b1b2.config"
+      - "with_cost : cost:Cost_model.config -> Strategy_b1b2.config -> Strategy_b1b2.config"
+      - "with_qty : qty:float -> Strategy_b1b2.config -> Strategy_b1b2.config"
+      - "with_session : start:int -> end_:int -> Strategy_b1b2.config -> Strategy_b1b2.config"
+      - "params : Strategy_b1b2.config -> B1b2_params.t"
+      - "pure_strategy : Strategy_b1b2.config -> Engine.pure_strategy"
+      - strategy_pure : Engine.pure_strategy
+
+  - name: Vwap_revert_params
+    file_ml: agents_workspace/lib/strategies/vwap_revert/vwap_revert_params.ml
+    file_mli: agents_workspace/lib/strategies/vwap_revert/vwap_revert_params.mli
+    summary: VWAP reversion strategy tunables with parameter specs and overrides.
+    provides_types:
+      - Vwap_revert_params.t
+      - Vwap_revert_params.field
+    provides_values:
+      - param_table : Vwap_revert_params.field list
+      - defaults : Vwap_revert_params.t
+      - parameter_specs : Parameters.t list
+      - "apply_overrides : Parameters.value_map -> Vwap_revert_params.t -> Vwap_revert_params.t"
+
+  - name: Vwap_revert_strategy
+    file_ml: agents_workspace/lib/strategies/vwap_revert/vwap_revert_strategy.ml
+    file_mli: agents_workspace/lib/strategies/vwap_revert/vwap_revert_strategy.mli
+    summary: VWAP mean-reversion strategy with volatility targeting and cost model.
+    provides_types:
+      - Vwap_revert_strategy.config
+    provides_values:
+      - default_config : Vwap_revert_strategy.config
+      - strategy_id : string
+      - "parameter_specs : Parameters.t list"
+      - "config_of_params : Parameters.value_map -> Vwap_revert_strategy.config"
+      - "session_window : Vwap_revert_strategy.config -> int * int"
+      - "qty : Vwap_revert_strategy.config -> float"
+      - "cost : Vwap_revert_strategy.config -> Cost_model.config"
+      - "with_cost : cost:Cost_model.config -> Vwap_revert_strategy.config -> Vwap_revert_strategy.config"
+      - "with_s_entry : s_entry:float -> Vwap_revert_strategy.config -> Vwap_revert_strategy.config"
+      - "with_z_exit : z_exit:float -> Vwap_revert_strategy.config -> Vwap_revert_strategy.config"
+      - "with_session : start:int -> end_:int -> Vwap_revert_strategy.config -> Vwap_revert_strategy.config"
+      - "with_qty : qty:float -> Vwap_revert_strategy.config -> Vwap_revert_strategy.config"
+      - "pure_strategy : Vwap_revert_strategy.config -> Engine.pure_strategy"
+      - strategy_pure : Engine.pure_strategy
+
+  - name: Strategy_fast
+    file_ml: agents_workspace/lib/strategy_fast.ml
+    file_mli: null
+    summary: Umbrella module re-exporting core, engine, feature, plot, and strategy modules for CLI builds.
+    provides_values: []
 
   - name: Trade_transition_tests
     file_ml: agents_workspace/tests/trade_transition_tests.ml
@@ -411,6 +455,7 @@ signatures:
     values:
       - "init : Types.setup option -> state"
       - "step : Strategy_sig.env -> state -> Types.bar_1m -> state * Types.trade list"
+    
       - "finalize_day : Strategy_sig.env -> state -> Types.bar_1m option -> state * Types.trade list"
     implemented_by:
       - Strategy_b1b2.Pure
@@ -426,8 +471,8 @@ signatures:
 
 functors:
   - name: Vwap_revert_strategy.Pure
-    file_ml: agents_workspace/lib/strategies/vwap_revert_strategy.ml
-    file_mli: agents_workspace/lib/strategies/vwap_revert_strategy.mli
+    file_ml: agents_workspace/lib/strategies/vwap_revert/vwap_revert_strategy.ml
+    file_mli: agents_workspace/lib/strategies/vwap_revert/vwap_revert_strategy.mli
     description: Functor producing VWAP revert pure strategy module implementing Strategy_sig.S from a config.
     type:
       params:
@@ -533,30 +578,6 @@ types:
     description: Map from parameter names to float values.
     representation: alias
 
-  - name: Strategy_common.Tunables.env_defaults
-    defined_in_module: Strategy_common
-    file_mli: agents_workspace/lib/strategies/strategy_common.mli
-    description: Default environment tuple (session window, qty, cost) for strategy surfaces.
-    representation: record
-
-  - name: Strategy_common.Tunables.param_field
-    defined_in_module: Strategy_common
-    file_mli: agents_workspace/lib/strategies/strategy_common.mli
-    description: Metadata for a tunable parameter (name, bounds, setter, flags).
-    representation: record
-
-  - name: B1b2_params.t
-    defined_in_module: B1b2_params
-    file_mli: agents_workspace/lib/strategies/b1b2_params.mli
-    description: Tunable B1/B2 parameter set (ticks, thresholds, windows).
-    representation: record
-
-  - name: B1b2_params.field
-    defined_in_module: B1b2_params
-    file_mli: agents_workspace/lib/strategies/b1b2_params.mli
-    description: Metadata for a single B1/B2 parameter (name, bounds, setter, tunable flag).
-    representation: record
-
   - name: Guardrails.t
     defined_in_module: Guardrails
     file_mli: agents_workspace/lib/core/guardrails.mli
@@ -567,6 +588,54 @@ types:
     defined_in_module: Cost_model
     file_mli: agents_workspace/lib/core/cost_model.mli
     description: Slippage, fee, and optional equity_base parameters used to adjust trades.
+    representation: record
+
+  - name: Strategy_common.Tunables.env_defaults
+    defined_in_module: Strategy_common
+    file_mli: agents_workspace/lib/strategies/common/strategy_common.mli
+    description: Default environment tuple (session window, qty, cost) for strategy surfaces.
+    representation: record
+
+  - name: Strategy_common.Tunables.param_field
+    defined_in_module: Strategy_common
+    file_mli: agents_workspace/lib/strategies/common/strategy_common.mli
+    description: Metadata for a tunable parameter (name, bounds, setter, flags).
+    representation: record
+
+  - name: B1b2_params.Setup.t
+    defined_in_module: B1b2_params
+    file_mli: agents_workspace/lib/strategies/b1b2/b1b2_params.mli
+    description: Tunable thresholds for B1/B2 setup selection.
+    representation: record
+
+  - name: B1b2_params.Exec.t
+    defined_in_module: B1b2_params
+    file_mli: agents_workspace/lib/strategies/b1b2/b1b2_params.mli
+    description: Execution parameters for entries, stops, and downgrades.
+    representation: record
+
+  - name: B1b2_params.t
+    defined_in_module: B1b2_params
+    file_mli: agents_workspace/lib/strategies/b1b2/b1b2_params.mli
+    description: Combined setup and execution parameter set for B1/B2.
+    representation: record
+
+  - name: B1b2_params.field
+    defined_in_module: B1b2_params
+    file_mli: agents_workspace/lib/strategies/b1b2/b1b2_params.mli
+    description: Metadata for a single B1/B2 parameter (name, bounds, setter, tunable flag).
+    representation: record
+
+  - name: Vwap_revert_params.t
+    defined_in_module: Vwap_revert_params
+    file_mli: agents_workspace/lib/strategies/vwap_revert/vwap_revert_params.mli
+    description: Tunable parameter set for VWAP mean-reversion policy.
+    representation: record
+
+  - name: Vwap_revert_params.field
+    defined_in_module: Vwap_revert_params
+    file_mli: agents_workspace/lib/strategies/vwap_revert/vwap_revert_params.mli
+    description: Metadata for a VWAP-revert parameter (bounds, setter, tunable flag).
     representation: record
 
   - name: Strategy_sig.env
@@ -605,15 +674,21 @@ types:
     description: Per-strategy outcomes including trades and daily PnL (R/USD/pct).
     representation: record
 
+  - name: Pnl_agg.t
+    defined_in_module: Pnl_agg
+    file_mli: agents_workspace/lib/engine/pnl_agg.mli
+    description: Aggregator of trades and daily R/USD/pct PnL maps.
+    representation: record
+
   - name: Strategy_b1b2.config
     defined_in_module: Strategy_b1b2
-    file_mli: agents_workspace/lib/strategies/strategy_b1b2.mli
+    file_mli: agents_workspace/lib/strategies/b1b2/strategy_b1b2.mli
     description: Session window, qty, cost, and param configuration for B1/B2 strategy packaging.
     representation: abstract
 
   - name: Vwap_revert_strategy.config
     defined_in_module: Vwap_revert_strategy
-    file_mli: agents_workspace/lib/strategies/vwap_revert_strategy.mli
+    file_mli: agents_workspace/lib/strategies/vwap_revert/vwap_revert_strategy.mli
     description: Parameter set for VWAP mean-reversion policy (features, risk, cost).
     representation: abstract
 
@@ -697,7 +772,7 @@ pipelines:
     description: Command-line B1/B2 backtest over CSV input with optional cost/qty overrides, PNG plots, and CSV export.
     signature: null
     entry_value: main
-    entry_type: "?plot_dir:string -> ?export_trades:string -> ?export_daily:string -> ?plot_python:string -> cfg:Strategy_b1b2.config -> string -> unit"
+    entry_type: "?plot_dir:string -> ?export_trades:string -> ?export_daily:string -> ?plot_python:string -> cfg:Strategy_fast.Strategies.Strategy_b1b2.config -> string -> unit"
     uses_modules:
       - Strategy_fast
       - Engine
@@ -711,7 +786,7 @@ pipelines:
     module: Vwap_revert_main
     file_ml: agents_workspace/bin/vwap_revert_main.ml
     file_mli: null
-    description: Command-line VWAP mean-revert backtest over CSV input with tunable cost/slippage, plots, and CSV export.
+    description: CLI VWAP mean-revert backtest over CSV input with tunable cost/slippage, plots, and CSV export.
     signature: null
     entry_value: main
     entry_type: "slippage:float -> fees:float -> s_entry:float -> z_exit:float -> ?plot_dir:string -> ?export_trades:string -> ?export_daily:string -> ?plot_python:string -> string -> unit"
