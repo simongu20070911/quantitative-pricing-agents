@@ -2,7 +2,7 @@ project:
   name: qpa
   root: agents_workspace
   language: ocaml
-  description: Intraday ES backtesting & optimization toolkit with reusable engine, strategies, plotting, and CLI runners.
+  description: Intraday ES backtesting & optimization toolkit with reusable engine, pure-strategy packaging, plotting, and CLI runners.
 
 modules:
   - name: Types
@@ -72,7 +72,7 @@ modules:
     provides_types:
       - Guardrails.t
     provides_values:
-      - "default : Guardrails.t"
+      - default : Guardrails.t
       - "apply_overrides : Guardrails.t -> Yojson.Safe.t -> Guardrails.t"
       - "load : ?path:string -> ?strategy_id:string -> unit -> (Guardrails.t, string) result"
       - "hash : Guardrails.t -> string"
@@ -132,21 +132,6 @@ modules:
       - "update : Features.state -> Types.bar_1m -> Features.state"
       - "snapshot : Features.state -> Features.snapshot"
 
-  - name: Setup_builder_b1b2
-    file_ml: agents_workspace/lib/strategies/setup_builder_b1b2.ml
-    file_mli: agents_workspace/lib/strategies/setup_builder_b1b2.mli
-    summary: Build B1/B2 daily setups and macro context from 1-minute bars.
-    provides_values:
-      - "compute_daily_context_and_setups : string -> Types.setup Date.Table.t"
-
-  - name: Trade_logic
-    file_ml: agents_workspace/lib/strategies/trade_logic.ml
-    file_mli: null
-    summary: Build B1/B2 trade plans from daily setup context.
-    provides_values:
-      - tick_size : float
-      - "build_trade_plan : Types.setup -> Types.trade_plan option"
-
   - name: Strategy_common
     file_ml: agents_workspace/lib/strategies/strategy_common.ml
     file_mli: agents_workspace/lib/strategies/strategy_common.mli
@@ -161,21 +146,78 @@ modules:
       - "Session.eod_flat : qty:float -> ?r_pts:float -> Cost_model.config -> direction:Types.direction -> entry_ts:Types.timestamp -> entry_px:float -> last_bar:Types.bar_1m -> meta:(string * string) list -> Types.trade"
       - "Setup.noop : string -> Types.setup Core.Date.Table.t"
 
+  - name: B1b2_constants
+    file_ml: agents_workspace/lib/strategies/b1b2_constants.ml
+    file_mli: agents_workspace/lib/strategies/b1b2_constants.mli
+    summary: Centralized B1/B2 domain constants for ticks, thresholds, and window lengths.
+    provides_values:
+      - tick_size : float
+      - tick_value : float
+      - be_trigger_mult : float
+      - downgrade_cutoff_offset_min : int
+      - two_r_range_factor : float
+      - climactic_range_factor : float
+      - gap_min_pct_adr : float
+      - gap_max_pct_adr : float
+      - body_pct_min : float
+      - ibs_bull_min : float
+      - ibs_bear_max : float
+      - abr_window_n : int
+      - adr_window_n : int
+
+  - name: Strategy_b1b2_constants
+    file_ml: agents_workspace/lib/strategies/strategy_b1b2_constants.ml
+    file_mli: agents_workspace/lib/strategies/strategy_b1b2_constants.mli
+    summary: Legacy B1/B2 constant aliases maintained for compatibility with older paths.
+    provides_values:
+      - tick_size : float
+      - tick_value : float
+      - be_trigger_mult : float
+      - b2_downgrade_grace_min : int
+      - twoR_range_cutoff_mult : float
+      - abr_range_cap_mult : float
+      - gap_pct_low : float
+      - gap_pct_high : float
+      - body_pct_min : float
+      - ibs_bull_min : float
+      - ibs_bear_max : float
+      - entry_slip_ticks : float
+
+  - name: Setup_builder_b1b2
+    file_ml: agents_workspace/lib/strategies/setup_builder_b1b2.ml
+    file_mli: agents_workspace/lib/strategies/setup_builder_b1b2.mli
+    summary: Build B1/B2 daily setups and macro context from 1-minute bars.
+    provides_values:
+      - "compute_daily_context_and_setups : string -> Types.setup Core.Date.Table.t"
+
+  - name: Trade_logic
+    file_ml: agents_workspace/lib/strategies/trade_logic.ml
+    file_mli: null
+    summary: Build B1/B2 trade plans from daily setup context.
+    provides_values:
+      - "build_trade_plan : Types.setup -> Types.trade_plan option"
+
   - name: Strategy_b1b2
     file_ml: agents_workspace/lib/strategies/strategy_b1b2.ml
     file_mli: agents_workspace/lib/strategies/strategy_b1b2.mli
-    summary: Policy implementation and packaged Engine strategies for classic B1/B2 setup.
+    summary: Pure and legacy wrappers for the classic B1/B2 setup strategy with session/qty/cost tuning.
     provides_types:
       - Strategy_b1b2.config
     provides_values:
-      - "default_config : Strategy_b1b2.config"
+      - default_config : Strategy_b1b2.config
       - strategy_id : string
       - "parameter_specs : Parameters.t list"
       - "config_of_params : Parameters.value_map -> Strategy_b1b2.config"
-      - "make_strategy : Strategy_b1b2.config -> Engine.strategy"
-      - strategy : Engine.strategy
-      - "make_pure_strategy : Strategy_b1b2.config -> Engine.pure_strategy"
+      - "session_window : Strategy_b1b2.config -> int * int"
+      - "qty : Strategy_b1b2.config -> float"
+      - "cost : Strategy_b1b2.config -> Cost_model.config"
+      - "with_cost : cost:Cost_model.config -> Strategy_b1b2.config -> Strategy_b1b2.config"
+      - "with_qty : qty:float -> Strategy_b1b2.config -> Strategy_b1b2.config"
+      - "with_session : start:int -> end_:int -> Strategy_b1b2.config -> Strategy_b1b2.config"
+      - "pure_strategy : Strategy_b1b2.config -> Engine.pure_strategy"
       - strategy_pure : Engine.pure_strategy
+      - "legacy_strategy : Strategy_b1b2.config -> Engine.strategy"
+      - strategy : Engine.strategy
 
   - name: Vwap_revert_strategy
     file_ml: agents_workspace/lib/strategies/vwap_revert_strategy.ml
@@ -184,13 +226,17 @@ modules:
     provides_types:
       - Vwap_revert_strategy.config
     provides_values:
-      - "default_config : Vwap_revert_strategy.config"
+      - default_config : Vwap_revert_strategy.config
       - strategy_id : string
       - "parameter_specs : Parameters.t list"
       - "config_of_params : Parameters.value_map -> Vwap_revert_strategy.config"
-      - "make_pure_strategy : Vwap_revert_strategy.config -> Engine.pure_strategy"
+      - "cost : Vwap_revert_strategy.config -> Cost_model.config"
+      - "with_cost : cost:Cost_model.config -> Vwap_revert_strategy.config -> Vwap_revert_strategy.config"
+      - "with_s_entry : s_entry:float -> Vwap_revert_strategy.config -> Vwap_revert_strategy.config"
+      - "with_z_exit : z_exit:float -> Vwap_revert_strategy.config -> Vwap_revert_strategy.config"
+      - "pure_strategy : Vwap_revert_strategy.config -> Engine.pure_strategy"
       - strategy_pure : Engine.pure_strategy
-      - "make_strategy : Vwap_revert_strategy.config -> Engine.strategy"
+      - "legacy_strategy : Vwap_revert_strategy.config -> Engine.strategy"
       - strategy : Engine.strategy
 
   - name: Strategy_fast
@@ -231,6 +277,7 @@ modules:
     provides_values:
       - "run : Engine.strategy -> filename:string -> Engine.run_result"
       - "run_pure : Engine.pure_strategy -> filename:string -> Engine.run_result"
+      - "legacy_of_pure : id:string -> env:Strategy_sig.env -> ?build_setups:(string -> Types.setup Core.Date.Table.t) -> (module Strategy_sig.S) -> Engine.strategy"
 
   - name: Backtest
     file_ml: agents_workspace/lib/engine/backtest.ml
@@ -249,7 +296,10 @@ modules:
       - Multi_engine.run_result
     provides_values:
       - "run_all : Engine.strategy list -> filename:string -> Multi_engine.run_result list"
+      - "run_all_pure : Engine.pure_strategy list -> filename:string -> Multi_engine.run_result list"
+      - "run_shared_with_stream : stream:(module Multi_engine.BAR_STREAM) -> make_setups:(Engine.strategy -> Types.setup Core.Date.Table.t) -> Engine.strategy list -> Multi_engine.run_result list"
       - "run_shared : Engine.strategy list -> filename:string -> Multi_engine.run_result list"
+      - "run_shared_pure : Engine.pure_strategy list -> filename:string -> Multi_engine.run_result list"
 
   - name: Opt_algos
     file_ml: agents_workspace/lib/engine/opt_algos.ml
@@ -314,8 +364,8 @@ signatures:
       - "on_bar : t -> Types.bar_1m -> t * Types.trade list"
       - "on_session_end : t -> Types.bar_1m option -> t * Types.trade list"
     implemented_by:
-      - Strategy_b1b2 (via make_strategy)
-      - Vwap_revert_strategy (via make_strategy)
+      - Strategy_b1b2 (via legacy_strategy)
+      - Vwap_revert_strategy (via legacy_strategy)
 
   - name: Strategy_sig.S
     file_mli: agents_workspace/lib/engine/strategy_sig.mli
@@ -327,21 +377,17 @@ signatures:
       - "step : Strategy_sig.env -> state -> Types.bar_1m -> state * Types.trade list"
       - "finalize_day : Strategy_sig.env -> state -> Types.bar_1m option -> state * Types.trade list"
     implemented_by:
-      - Strategy_b1b2.Pure
       - Vwap_revert_strategy.Pure
+      - Strategy_b1b2 (via pure_strategy)
+
+  - name: Multi_engine.BAR_STREAM
+    file_mli: agents_workspace/lib/engine/multi_engine.mli
+    description: Minimal streaming interface for shared multi-strategy execution.
+    types: []
+    values:
+      - "iter : f:(Types.bar_1m -> unit) -> unit"
 
 functors:
-  - name: Strategy_b1b2.Pure
-    file_ml: agents_workspace/lib/strategies/strategy_b1b2.ml
-    file_mli: agents_workspace/lib/strategies/strategy_b1b2.mli
-    description: Produce a Strategy_sig.S implementation from a B1/B2 config.
-    type:
-      params:
-        - Cfg: { cfg: Strategy_b1b2.config }
-      result: module with type state = Strategy_b1b2.Pure.state and includes Strategy_sig.S
-    param_signatures: []
-    result_signature: Strategy_sig.S
-
   - name: Vwap_revert_strategy.Pure
     file_ml: agents_workspace/lib/strategies/vwap_revert_strategy.ml
     file_mli: agents_workspace/lib/strategies/vwap_revert_strategy.mli

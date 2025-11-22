@@ -1,9 +1,8 @@
 open Core
 open Types
 open Time_utils
-module C = B1b2_constants
 
-let build_trade_plan (s : setup) : trade_plan option =
+let build_trade_plan ~(params : B1b2_params.t) (s : setup) : trade_plan option =
   let b1 = s.b1 in
   let b2 = s.b2 in
   let b1_range = b1.high -. b1.low in
@@ -12,15 +11,15 @@ let build_trade_plan (s : setup) : trade_plan option =
   let entry_price, cancel_level, stop_init, b2_good =
     match direction with
     | Long ->
-        let entry_price  = b1.high +. C.tick_size in
+        let entry_price  = b1.high +. params.tick_size in
         let cancel_level = b1.low in
-        let stop_init    = b1.low -. C.tick_size in
+        let stop_init    = b1.low -. params.tick_size in
         let b2_good      = Float.(b2.close > b2.open_) in
         entry_price, cancel_level, stop_init, b2_good
     | Short ->
-        let entry_price  = b1.low -. C.tick_size in
+        let entry_price  = b1.low -. params.tick_size in
         let cancel_level = b1.high in
-        let stop_init    = b1.high +. C.tick_size in
+        let stop_init    = b1.high +. params.tick_size in
         let b2_good      = Float.(b2.close < b2.open_) in
         entry_price, cancel_level, stop_init, b2_good
   in
@@ -28,7 +27,7 @@ let build_trade_plan (s : setup) : trade_plan option =
   if Float.(r_pts <= 0.) || Float.(s.abr_prev <= 0.) then
     None
   else begin
-    let can_use_twoR = Float.(b1_range <= C.two_r_range_factor *. s.abr_prev) in
+    let can_use_twoR = Float.(b1_range <= params.two_r_range_factor *. s.abr_prev) in
     let initial_target_mult = if can_use_twoR then 2.0 else 1.0 in
     let target_price =
       match direction with
@@ -37,12 +36,12 @@ let build_trade_plan (s : setup) : trade_plan option =
     in
     let be_trigger =
       match direction with
-      | Long  -> entry_price +. C.be_trigger_mult *. r_pts
-      | Short -> entry_price -. C.be_trigger_mult *. r_pts
+      | Long  -> entry_price +. params.be_trigger_mult *. r_pts
+      | Short -> entry_price -. params.be_trigger_mult *. r_pts
     in
     let b2_follow = if b2_good then Follow_good else Follow_poor in
     let downgrade_after_b2 = can_use_twoR && (not b2_good) in
-    let b2_end_minute = b2_min + C.downgrade_cutoff_offset_min in
+    let b2_end_minute = b2_min + params.downgrade_cutoff_offset_min in
     Some {
       direction;
       entry_price;

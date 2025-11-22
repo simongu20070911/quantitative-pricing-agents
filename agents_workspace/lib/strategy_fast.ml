@@ -37,6 +37,7 @@ end
 module Strategies = struct
   module Strategy_b1b2 = Strategy_b1b2
   module Vwap_revert_strategy = Vwap_revert_strategy
+  module B1b2_params = B1b2_params
 end
 
 module Trade_logic = Trade_logic

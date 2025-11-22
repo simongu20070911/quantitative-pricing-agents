@@ -14,6 +14,7 @@ val cost : config -> Cost_model.config
 val with_cost : cost:Cost_model.config -> config -> config
 val with_qty : qty:float -> config -> config
 val with_session : start:int -> end_:int -> config -> config
+val params : config -> B1b2_params.t
 
 val pure_strategy : config -> Engine.pure_strategy
 val strategy_pure : Engine.pure_strategy

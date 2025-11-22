@@ -31,7 +31,10 @@ let%test_unit "backtest wrapper matches engine run for b1b2" =
     session_end_min = se;
     trade_start_min = b2_min;
     trade_end_min = abr_eod_min;
-    build_trade_plan = Strategy_fast.Trade_logic.build_trade_plan;
+    build_trade_plan = (fun setup ->
+        Strategy_fast.Trade_logic.build_trade_plan
+          ~params:(Strategy_fast.Strategies.Strategy_b1b2.params Strategies.Strategy_b1b2.default_config)
+          setup);
     on_plan_bar = (fun _ _ -> ());
   } in
   let trades_bt, _ = TB.run ~config:bt_cfg fixture setups in

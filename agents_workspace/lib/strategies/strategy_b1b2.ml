@@ -4,6 +4,7 @@ open Time_utils
 module SC = Strategy_common
 module TT = Trade_transition
 module C = B1b2_constants
+module P = B1b2_params
 
 module Setup_builder = Setup_builder_b1b2
 module SS = Strategy_sig
@@ -13,6 +14,7 @@ type config = {
   session_end_min   : int;
   qty : float;
   cost : Cost_model.config;
+  params : P.t;
 }
 
 let default_config = {
@@ -26,77 +28,38 @@ let default_config = {
     fee_per_contract = 4.0;
     equity_base = None;
   };
+  params = P.default;
 }
 
 let strategy_id = "b1b2"
 
-type param_field = {
-  name : string;
-  default : float;
-  bounds : float * float;
-  integer : bool;
-  tunable : bool;
-  description : string;
-  set : config -> float -> config;
-}
-
-let param_table : param_field list =
-  let int = true and fl = false in
-  [
-    { name = "session_start_min"; default = Float.of_int default_config.session_start_min;
-      bounds = (0., 1440.); integer = int; tunable = true; description = "session start minute-of-day (ET)";
-      set = (fun cfg v -> { cfg with session_start_min = Int.of_float v |> Int.clamp_exn ~min:0 ~max:1439 }) };
-    { name = "session_end_min"; default = Float.of_int default_config.session_end_min;
-      bounds = (0., 1440.); integer = int; tunable = true; description = "session end minute-of-day (ET)";
-      set = (fun cfg v -> { cfg with session_end_min = Int.of_float v |> Int.clamp_exn ~min:0 ~max:1439 }) };
-    { name = "qty"; default = default_config.qty; bounds = (0.1, 20.); integer = fl; tunable = true;
-      description = "contracts per trade"; set = (fun cfg v -> { cfg with qty = v }) };
-    { name = "cost.slippage_roundtrip_ticks"; default = default_config.cost.slippage_roundtrip_ticks;
-      bounds = (0., 3.); integer = fl; tunable = true; description = "assumed round-trip slippage in ticks";
-      set = (fun cfg v -> { cfg with cost = { cfg.cost with slippage_roundtrip_ticks = v } }) };
-    { name = "cost.fee_per_contract"; default = default_config.cost.fee_per_contract;
-      bounds = (0., 10.); integer = fl; tunable = true; description = "exchange+broker fee per contract";
-      set = (fun cfg v -> { cfg with cost = { cfg.cost with fee_per_contract = v } }) };
-    { name = "cost.equity_base"; default = Option.value default_config.cost.equity_base ~default:0.;
-      bounds = (0., 5_000_000.); integer = fl; tunable = false; description = "account equity in USD for pct PnL; 0 disables";
-      set = (fun cfg v -> { cfg with cost = { cfg.cost with equity_base = if Float.(v <= 0.) then None else Some v } }) };
-    (* Fixed domain constants below, marked tunable=false for now. Flip to true to expose to optimizer. *)
-    { name = "be_trigger_mult"; default = C.be_trigger_mult; bounds = (0.1, 1.0); integer = fl; tunable = false;
-      description = "break-even trigger in R"; set = (fun cfg _ -> cfg) };
-    { name = "downgrade_grace_min"; default = Float.of_int C.downgrade_cutoff_offset_min; bounds = (0., 30.); integer = int; tunable = false;
-      description = "minutes after B2 to allow downgrade"; set = (fun cfg _ -> cfg) };
-    { name = "twoR_range_factor"; default = C.two_r_range_factor; bounds = (0.5, 3.); integer = fl; tunable = false;
-      description = "max B1 range / ABR_prev to allow 2R"; set = (fun cfg _ -> cfg) };
-    { name = "climactic_range_factor"; default = C.climactic_range_factor; bounds = (1.0, 5.0); integer = fl; tunable = false;
-      description = "max B1 range / ABR_prev to be valid"; set = (fun cfg _ -> cfg) };
-    { name = "gap_pct_low"; default = C.gap_min_pct_adr; bounds = (0., 100.); integer = fl; tunable = false;
-      description = "min |gap| %% ADR to qualify"; set = (fun cfg _ -> cfg) };
-    { name = "gap_pct_high"; default = C.gap_max_pct_adr; bounds = (0., 100.); integer = fl; tunable = false;
-      description = "max |gap| %% ADR to qualify"; set = (fun cfg _ -> cfg) };
-    { name = "body_pct_min"; default = C.body_pct_min; bounds = (0., 1.); integer = fl; tunable = false;
-      description = "min body/range for trend"; set = (fun cfg _ -> cfg) };
-    { name = "ibs_bull_min"; default = C.ibs_bull_min; bounds = (0., 1.); integer = fl; tunable = false;
-      description = "IBS threshold bullish"; set = (fun cfg _ -> cfg) };
-    { name = "ibs_bear_max"; default = C.ibs_bear_max; bounds = (0., 1.); integer = fl; tunable = false;
-      description = "IBS threshold bearish"; set = (fun cfg _ -> cfg) };
-  ]
-
 let parameter_specs =
-  param_table
-  |> List.filter ~f:(fun p -> p.tunable)
-  |> List.map ~f:(fun p ->
-      Parameters.make ~name:p.name ~default:p.default ~bounds:p.bounds
-        ~integer:p.integer ~description:p.description ())
+  let core =
+    SC.Config.session_params ~default_start:default_config.session_start_min
+      ~default_end:default_config.session_end_min
+    @ [
+        Parameters.make ~name:"qty" ~default:1.0 ~bounds:(0.1, 20.)
+          ~description:"contracts per trade" ();
+      ]
+    @ SC.Config.cost_params default_config.cost
+  in
+  core @ P.parameter_specs
 
 let config_of_params (m : Parameters.value_map) : config =
-  List.fold param_table ~init:default_config ~f:(fun cfg p ->
-      match Map.find m p.name with
-      | None -> cfg
-      | Some v -> p.set cfg v)
+  let session_start_min, session_end_min =
+    SC.Config.session_of_params
+      ~defaults:(default_config.session_start_min, default_config.session_end_min)
+      m
+  in
+  let qty = Map.find m "qty" |> Option.value ~default:default_config.qty in
+  let cost = SC.Config.cost_of_params ~defaults:default_config.cost m in
+  let params = P.apply_overrides m default_config.params in
+  { session_start_min; session_end_min; qty; cost; params }
 
 let session_window cfg = cfg.session_start_min, cfg.session_end_min
 let qty cfg = cfg.qty
 let cost cfg = cfg.cost
+let params cfg = cfg.params
 let with_cost ~cost cfg = { cfg with cost }
 let with_qty ~qty cfg = { cfg with qty }
 let with_session ~start ~end_ cfg = { cfg with session_start_min = start; session_end_min = end_ }
@@ -135,7 +98,7 @@ module Pure (Cfg : sig val cfg : config end) : SS.S = struct
     match setup_opt with
     | None -> { plan = None; trade_state = No_trade }
     | Some s ->
-        (match Trade_logic.build_trade_plan s with
+        (match Trade_logic.build_trade_plan ~params:Cfg.cfg.params s with
          | None -> { plan = None; trade_state = No_trade }
          | Some plan -> { plan = Some plan; trade_state = Pending })
 
@@ -211,7 +174,7 @@ let make_pure_strategy cfg =
   {
     Engine._id = strategy_id;
     env;
-    build_setups = Some Setup_builder.compute_daily_context_and_setups;
+    build_setups = Some (Setup_builder.compute_daily_context_and_setups_with_params cfg.params);
     strategy = (module S);
   }
 
