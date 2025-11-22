@@ -105,7 +105,7 @@ modules:
   - name: Summary
     file_ml: agents_workspace/lib/core/summary.ml
     file_mli: agents_workspace/lib/core/summary.mli
-    summary: Compute and print performance statistics; export trades and daily PnL to CSV.
+    summary: Compute and print performance statistics (Sharpe, drawdown, skew); export trades and daily PnL to CSV.
     provides_values:
       - "compute_stats : ?daily_usd:(Date.t * float) list -> ?daily_pct:(Date.t * float) list -> Types.trade list -> (Date.t * float) list -> Types.perf_stats"
       - "print_stats : Types.perf_stats -> unit"
@@ -312,8 +312,12 @@ modules:
   - name: Setup_builder_b1b2
     file_ml: agents_workspace/lib/strategies/b1b2/setup_builder_b1b2.ml
     file_mli: agents_workspace/lib/strategies/b1b2/setup_builder_b1b2.mli
-    summary: Build B1/B2 daily setups and macro context from 1-minute bars, parameterized by B1b2_params.
+    summary: Build B1/B2 daily setups via reusable bar aggregation (day macro, 5m pivots, ABR/ADR) then assemble setups.
+    provides_types:
+      - Setup_builder_b1b2.agg_tables
     provides_values:
+      - "aggregate_bars : B1b2_params.Setup.t -> string -> Setup_builder_b1b2.agg_tables"
+      - "build_setups : B1b2_params.Setup.t -> Setup_builder_b1b2.agg_tables -> Types.setup Core.Date.Table.t"
       - "build : B1b2_params.Setup.t -> string -> Types.setup Core.Date.Table.t"
       - "build_with_defaults : string -> Types.setup Core.Date.Table.t"
 
@@ -381,10 +385,21 @@ modules:
       - "pure_strategy : Vwap_revert_strategy.config -> Engine.pure_strategy"
       - strategy_pure : Engine.pure_strategy
 
+  - name: Strategy_registry
+    file_ml: agents_workspace/lib/strategy_registry.ml
+    file_mli: null
+    summary: Registry mapping strategy_id to parameter specs and builders for pure strategies.
+    provides_types:
+      - Strategy_registry.pack
+    provides_values:
+      - "all : unit -> Strategy_registry.pack list"
+      - "find : string -> Strategy_registry.pack option"
+      - "find_exn : string -> Strategy_registry.pack"
+
   - name: Strategy_fast
     file_ml: agents_workspace/lib/strategy_fast.ml
     file_mli: null
-    summary: Umbrella module re-exporting core, engine, feature, plot, and strategy modules for CLI builds.
+    summary: Umbrella module re-exporting core, engine, feature, plot, strategy modules, and strategy registry for CLI builds.
     provides_values: []
 
   - name: Trade_transition_tests
@@ -434,6 +449,49 @@ modules:
     file_mli: null
     summary: Property test confirming bar permutation determinism for B1/B2 strategy.
     provides_values: []
+
+  - name: Csv_parser_tests
+    file_ml: agents_workspace/tests/csv_parser_tests.ml
+    file_mli: null
+    summary: Unit tests for Csv_parser.parse_bar_1m column selection and error handling.
+    provides_values: []
+
+  - name: Position_sizing_edge_tests
+    file_ml: agents_workspace/tests/position_sizing_edge_tests.ml
+    file_mli: null
+    summary: Edge-case tests for vol_target_units/vol_target_scale rounding and caps.
+    provides_values: []
+
+  - name: Time_utils_tests
+    file_ml: agents_workspace/tests/time_utils_tests.ml
+    file_mli: null
+    summary: RFC3339 parsing tests covering offsets, seconds validation, legacy format acceptance.
+    provides_values: []
+
+  - name: Summary_edge_tests
+    file_ml: agents_workspace/tests/summary_edge_tests.ml
+    file_mli: null
+    summary: Tests for compute_stats Sharpe None path and drawdown order-independence.
+    provides_values: []
+
+  - name: Core_primitives_tests
+    file_ml: agents_workspace/tests/core_primitives_tests.ml
+    file_mli: null
+    summary: Comprehensive tests for position sizing, cost model, trade_base durations, and summary stats.
+    provides_values: []
+
+  - name: Setup_builder_b1b2_tests
+    file_ml: agents_workspace/tests/setup_builder_b1b2_tests.ml
+    file_mli: null
+    summary: Validates refactored B1B2 bar aggregation plus setup assembly equals legacy build.
+    provides_values: []
+
+  - name: Test_utils
+    file_ml: agents_workspace/tests/test_utils.ml
+    file_mli: null
+    summary: Shared test helpers (e.g., locating sample_es.csv fixture).
+    provides_values:
+      - "find_fixture : unit -> string"
 
 signatures:
   - name: Policy_sig.S
@@ -557,7 +615,7 @@ types:
   - name: Types.perf_stats
     defined_in_module: Types
     file_mli: null
-    description: Aggregate performance statistics (R, USD, pct) over trades and days.
+    description: Aggregate performance statistics (R, USD, pct) with drawdowns and skew over trades and days.
     representation: record
 
   - name: Parameters.Scale.t

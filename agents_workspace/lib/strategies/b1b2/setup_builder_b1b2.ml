@@ -20,6 +20,36 @@ let create_day_macro () =
     rth_close = None;
     has_rth   = false; }
 
+let update_day_macro tbl ~date ~high ~low ~close =
+  let macro = Hashtbl.find_or_add tbl date ~default:create_day_macro in
+  macro.rth_high  <- Float.max macro.rth_high high;
+  macro.rth_low   <- Float.min macro.rth_low low;
+  macro.rth_close <- Some close;
+  macro.has_rth   <- true
+
+let update_5m current_5m ~date ~bucket_minute ~open_ ~high ~low ~close =
+  match !current_5m with
+  | None ->
+      current_5m := Some { date; minute_of_day = bucket_minute; open_; high; low; close }
+      ; `No_flush
+  | Some b5 when Date.equal date b5.date && bucket_minute = b5.minute_of_day ->
+      b5.high <- Float.max b5.high high;
+      b5.low  <- Float.min b5.low low;
+      b5.close <- close
+      ; `No_flush
+  | Some b5 ->
+      `Flush_and_replace b5
+
+let flush_5m b abr_window b1_tbl b2_tbl eod_abr_tbl =
+  let range = b.high -. b.low in
+  Abr.update abr_window range;
+  (match Abr.value abr_window with
+   | Some abr when b.minute_of_day = abr_eod_min ->
+       Hashtbl.set eod_abr_tbl ~key:b.date ~data:abr
+   | _ -> ());
+  if b.minute_of_day = b1_min then Hashtbl.set b1_tbl ~key:b.date ~data:b;
+  if b.minute_of_day = b2_min then Hashtbl.set b2_tbl ~key:b.date ~data:b
+
 let init_aggregators (params : P.t) =
   let day_macro_tbl = Date.Table.create () in
   let b1_tbl = Date.Table.create () in
@@ -28,46 +58,31 @@ let init_aggregators (params : P.t) =
   let abr_window = Abr.create ~n:params.abr_window_n in
   let current_5m : bar_5m option ref = ref None in
 
-  let flush_5m (b : bar_5m) =
-    let range = b.high -. b.low in
-    Abr.update abr_window range;
-    (match Abr.value abr_window with
-     | Some abr when b.minute_of_day = abr_eod_min ->
-         Hashtbl.set eod_abr_tbl ~key:b.date ~data:abr
-     | _ -> ());
-    if b.minute_of_day = b1_min then Hashtbl.set b1_tbl ~key:b.date ~data:b;
-    if b.minute_of_day = b2_min then Hashtbl.set b2_tbl ~key:b.date ~data:b;
-  in
-
   let process_bar (bar : bar_1m) =
     let { ts = { date; minute_of_day }; open_; high; low; close; _ } = bar in
 
-    if minute_of_day >= rth_start_min && minute_of_day <= rth_end_min then begin
-      let macro = Hashtbl.find_or_add day_macro_tbl date ~default:create_day_macro in
-      macro.rth_high  <- Float.max macro.rth_high high;
-      macro.rth_low   <- Float.min macro.rth_low low;
-      macro.rth_close <- Some close;
-      macro.has_rth   <- true;
-    end;
+    if minute_of_day >= rth_start_min && minute_of_day <= rth_end_min then
+      update_day_macro day_macro_tbl ~date ~high ~low ~close;
 
     let bucket_minute = (minute_of_day / 5) * 5 in
-    match !current_5m with
-    | None ->
+    match update_5m current_5m ~date ~bucket_minute ~open_ ~high ~low ~close with
+    | `Flush_and_replace b5 ->
+        flush_5m b5 abr_window b1_tbl b2_tbl eod_abr_tbl;
         current_5m := Some { date; minute_of_day = bucket_minute; open_; high; low; close }
-    | Some b5 when Date.equal date b5.date && bucket_minute = b5.minute_of_day ->
-        b5.high <- Float.max b5.high high;
-        b5.low  <- Float.min b5.low low;
-        b5.close <- close
-    | Some b5 ->
-        flush_5m b5;
-        current_5m := Some { date; minute_of_day = bucket_minute; open_; high; low; close }
+    | `No_flush -> ()
   in
 
   let finalize () =
-    Option.iter !current_5m ~f:flush_5m;
+    Option.iter !current_5m ~f:(fun b ->
+        flush_5m b abr_window b1_tbl b2_tbl eod_abr_tbl);
     { day_macro_tbl; b1_tbl; b2_tbl; eod_abr_tbl }
   in
   process_bar, finalize
+
+let aggregate_bars (params : P.t) filename : agg_tables =
+  let process_bar, finalize = init_aggregators params in
+  iter_bars filename ~f:process_bar;
+  finalize ()
 
 let build_setups (params : P.t) (tables : agg_tables) : setup Date.Table.t =
   let setups_tbl : setup Date.Table.t = Date.Table.create () in
@@ -125,6 +140,13 @@ let build_setups (params : P.t) (tables : agg_tables) : setup Date.Table.t =
       end);
 
   setups_tbl
+
+(* Top-level: stream bars, aggregate intermediates, then build setups. *)
+let build (params : P.t) filename : setup Date.Table.t =
+  let process_bar, finalize = init_aggregators params in
+  iter_bars filename ~f:process_bar;
+  let tables = finalize () in
+  build_setups params tables
 
 let build (params : P.t) filename : setup Date.Table.t =
   let process_bar, finalize = init_aggregators params in
