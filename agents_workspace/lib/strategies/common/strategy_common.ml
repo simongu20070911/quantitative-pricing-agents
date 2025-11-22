@@ -6,33 +6,9 @@ module Trade = struct
       (direction : direction)
       ~entry_ts:(entry_ts : timestamp) ~entry_px ~exit_ts:(exit_ts : timestamp)
       ~exit_px ~reason ~(meta : (string * string) list) : trade =
-    let pnl_pts =
-      match direction with
-      | Long  -> exit_px -. entry_px
-      | Short -> entry_px -. exit_px
-    in
-    let pnl_R = pnl_pts /. r_pts in
-    let duration_min = Float.of_int (exit_ts.minute_of_day - entry_ts.minute_of_day) in
-    let t =
-      {
-        date = exit_ts.date;
-        direction;
-        entry_ts = entry_ts;
-        exit_ts = exit_ts;
-        entry_price = entry_px;
-        exit_price = exit_px;
-        qty;
-        r_pts;
-        pnl_pts;
-        pnl_R;
-        pnl_usd = 0.0;
-        pnl_pct = None;
-        duration_min;
-        exit_reason = reason;
-        meta;
-      }
-    in
-    Cost_model.apply ~qty cost t
+    Trade_base.make_raw ~qty ~r_pts ~direction ~entry_ts ~entry_px
+      ~exit_ts ~exit_px ~exit_reason:reason ~meta
+    |> Trade_base.apply_costs ~qty cost
 end
 
 module Config = struct
@@ -98,4 +74,84 @@ end
 
 module Setup = struct
   let noop (_filename : string) : setup Core.Date.Table.t = Core.Date.Table.create ()
+end
+
+module Setups = struct
+  let with_params ~params f filename = f params filename
+end
+
+module Strategy_builder = struct
+  let make_pure ~id ~env ?build_setups (module S : Strategy_sig.S) : Engine.pure_strategy =
+    { Engine._id = id; env; build_setups; strategy = (module S) }
+end
+
+module Trade_common = struct
+  let with_strategy id meta = ("strategy", id) :: meta
+end
+
+module Tunables = struct
+  type env_defaults = {
+    session_start_min : int;
+    session_end_min   : int;
+    qty : float;
+    cost : Cost_model.config;
+  }
+
+  let env_specs ~defaults =
+    Config.session_params ~default_start:defaults.session_start_min
+      ~default_end:defaults.session_end_min
+    @ [
+        Parameters.make ~name:"qty" ~default:defaults.qty ~bounds:(0.1, 20.)
+          ~description:"contracts per trade" ();
+      ]
+    @ Config.cost_params defaults.cost
+
+  let env_of_params ~defaults (m : Parameters.value_map) : env_defaults =
+    let session_start_min, session_end_min =
+      Config.session_of_params
+        ~defaults:(defaults.session_start_min, defaults.session_end_min) m
+    in
+    let qty = Map.find m "qty" |> Option.value ~default:defaults.qty in
+    let cost = Config.cost_of_params ~defaults:defaults.cost m in
+    { session_start_min; session_end_min; qty; cost }
+
+  type 'p param_field = {
+    name : string;
+    default : float;
+    bounds : float * float;
+    integer : bool;
+    tunable : bool;
+    description : string;
+    set : 'p -> float -> 'p;
+  }
+
+  let parameter_specs_of_table (tbl : 'p param_field list) : Parameters.t list =
+    tbl
+    |> List.filter ~f:(fun f -> f.tunable)
+    |> List.map ~f:(fun f ->
+        Parameters.make ~name:f.name ~default:f.default ~bounds:f.bounds
+          ~integer:f.integer ~description:f.description ())
+
+  let params_of_table ~defaults ~param_table (m : Parameters.value_map) =
+    List.fold param_table ~init:defaults ~f:(fun acc f ->
+        match Map.find m f.name with
+        | None -> acc
+        | Some v -> f.set acc v)
+
+  let make ~defaults_env ~defaults_params ~param_table =
+    let specs =
+      env_specs ~defaults:defaults_env
+      @ parameter_specs_of_table param_table
+    in
+    let build m =
+      let env = env_of_params ~defaults:defaults_env m in
+      let params = params_of_table ~defaults:defaults_params ~param_table m in
+      env, params
+    in
+    specs, build
+end
+
+module Env = struct
+  let of_config ~session_start_min ~session_end_min ~qty ~cost : Strategy_sig.env =
+    { Strategy_sig.session_start_min; session_end_min; qty; cost }
 end

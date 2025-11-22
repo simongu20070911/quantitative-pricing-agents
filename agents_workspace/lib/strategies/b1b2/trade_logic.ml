@@ -2,7 +2,7 @@ open Core
 open Types
 open Time_utils
 
-let build_trade_plan ~(params : B1b2_params.t) (s : setup) : trade_plan option =
+let build_trade_plan ~(params : B1b2_params.Exec.t) (s : setup) : trade_plan option =
   let b1 = s.b1 in
   let b2 = s.b2 in
   let b1_range = b1.high -. b1.low in

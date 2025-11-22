@@ -8,7 +8,7 @@ modules:
   - name: Types
     file_ml: agents_workspace/lib/core/types.ml
     file_mli: null
-    summary: Trading domain types for bars, setups, trades, lifecycle state, and performance stats.
+    summary: Trading domain types for bars, setups, trades, and performance stats.
     provides_types:
       - Types.direction
       - Types.timestamp
@@ -135,27 +135,53 @@ modules:
   - name: Strategy_common
     file_ml: agents_workspace/lib/strategies/strategy_common.ml
     file_mli: agents_workspace/lib/strategies/strategy_common.mli
-    summary: Shared trade construction, cost/session parameter helpers, tunable surfaces, and setup utilities.
-    provides_types:
-      - Strategy_common.Tunables.env_defaults
-      - Strategy_common.Tunables.param_field
+    summary: Shared trade construction, cost/session parameter helpers, and session utilities for strategies.
     provides_values:
       - "Trade.make : qty:float -> ?r_pts:float -> Cost_model.config -> Types.direction -> entry_ts:Types.timestamp -> entry_px:float -> exit_ts:Types.timestamp -> exit_px:float -> reason:Types.exit_reason -> meta:(string * string) list -> Types.trade"
       - "Config.cost_params : Cost_model.config -> Parameters.t list"
       - "Config.cost_of_params : defaults:Cost_model.config -> Parameters.value_map -> Cost_model.config"
       - "Config.session_params : default_start:int -> default_end:int -> Parameters.t list"
       - "Config.session_of_params : defaults:(int * int) -> Parameters.value_map -> int * int"
-      - "Tunables.env_specs : defaults:Strategy_common.Tunables.env_defaults -> Parameters.t list"
-      - "Tunables.env_of_params : defaults:Strategy_common.Tunables.env_defaults -> Parameters.value_map -> Strategy_common.Tunables.env_defaults"
-      - "Tunables.parameter_specs_of_table : 'p Strategy_common.Tunables.param_field list -> Parameters.t list"
-      - "Tunables.params_of_table : defaults:'p -> param_table:'p Strategy_common.Tunables.param_field list -> Parameters.value_map -> 'p"
-      - "Tunables.make : defaults_env:Strategy_common.Tunables.env_defaults -> defaults_params:'p -> param_table:'p Strategy_common.Tunables.param_field list -> Parameters.t list * (Parameters.value_map -> Strategy_common.Tunables.env_defaults * 'p)"
-      - "Env.of_config : session_start_min:int -> session_end_min:int -> qty:float -> cost:Cost_model.config -> Strategy_sig.env"
       - "Session.within : start:int -> end_:int -> Types.bar_1m -> bool"
       - "Session.eod_flat : qty:float -> ?r_pts:float -> Cost_model.config -> direction:Types.direction -> entry_ts:Types.timestamp -> entry_px:float -> last_bar:Types.bar_1m -> meta:(string * string) list -> Types.trade"
       - "Setup.noop : string -> Types.setup Core.Date.Table.t"
-      - "Setups.with_params : params:'p -> ('p -> string -> Types.setup Core.Date.Table.t) -> string -> Types.setup Core.Date.Table.t"
-      - "Strategy_builder.make_pure : id:string -> env:Strategy_sig.env -> ?build_setups:(string -> Types.setup Core.Date.Table.t) -> (module Strategy_sig.S) -> Engine.pure_strategy"
+
+  - name: B1b2_constants
+    file_ml: agents_workspace/lib/strategies/b1b2_constants.ml
+    file_mli: agents_workspace/lib/strategies/b1b2_constants.mli
+    summary: Centralized B1/B2 domain constants for ticks, thresholds, and window lengths.
+    provides_values:
+      - tick_size : float
+      - tick_value : float
+      - be_trigger_mult : float
+      - downgrade_cutoff_offset_min : int
+      - two_r_range_factor : float
+      - climactic_range_factor : float
+      - gap_min_pct_adr : float
+      - gap_max_pct_adr : float
+      - body_pct_min : float
+      - ibs_bull_min : float
+      - ibs_bear_max : float
+      - abr_window_n : int
+      - adr_window_n : int
+
+  - name: Strategy_b1b2_constants
+    file_ml: agents_workspace/lib/strategies/strategy_b1b2_constants.ml
+    file_mli: agents_workspace/lib/strategies/strategy_b1b2_constants.mli
+    summary: Legacy B1/B2 constant aliases maintained for compatibility with older paths.
+    provides_values:
+      - tick_size : float
+      - tick_value : float
+      - be_trigger_mult : float
+      - b2_downgrade_grace_min : int
+      - twoR_range_cutoff_mult : float
+      - abr_range_cap_mult : float
+      - gap_pct_low : float
+      - gap_pct_high : float
+      - body_pct_min : float
+      - ibs_bull_min : float
+      - ibs_bear_max : float
+      - entry_slip_ticks : float
 
   - name: B1b2_params
     file_ml: agents_workspace/lib/strategies/b1b2_params.ml
@@ -165,7 +191,7 @@ modules:
       - B1b2_params.t
       - B1b2_params.field
     provides_values:
-      - defaults : B1b2_params.t
+      - default : B1b2_params.t
       - param_table : B1b2_params.field list
       - parameter_specs : Parameters.t list
       - "apply_overrides : Parameters.value_map -> B1b2_params.t -> B1b2_params.t"
@@ -188,7 +214,7 @@ modules:
   - name: Strategy_b1b2
     file_ml: agents_workspace/lib/strategies/strategy_b1b2.ml
     file_mli: agents_workspace/lib/strategies/strategy_b1b2.mli
-    summary: Pure strategy wrapper for classic B1/B2 setup with session/qty/cost tuning and param overrides.
+    summary: Pure and legacy wrappers for the classic B1/B2 setup strategy with session/qty/cost tuning and param overrides.
     provides_types:
       - Strategy_b1b2.config
     provides_values:
@@ -199,13 +225,14 @@ modules:
       - "session_window : Strategy_b1b2.config -> int * int"
       - "qty : Strategy_b1b2.config -> float"
       - "cost : Strategy_b1b2.config -> Cost_model.config"
-      - "with_params : params:B1b2_params.t -> Strategy_b1b2.config -> Strategy_b1b2.config"
       - "with_cost : cost:Cost_model.config -> Strategy_b1b2.config -> Strategy_b1b2.config"
       - "with_qty : qty:float -> Strategy_b1b2.config -> Strategy_b1b2.config"
       - "with_session : start:int -> end_:int -> Strategy_b1b2.config -> Strategy_b1b2.config"
       - "params : Strategy_b1b2.config -> B1b2_params.t"
       - "pure_strategy : Strategy_b1b2.config -> Engine.pure_strategy"
       - strategy_pure : Engine.pure_strategy
+      - "legacy_strategy : Strategy_b1b2.config -> Engine.strategy"
+      - strategy : Engine.strategy
 
   - name: Vwap_revert_strategy
     file_ml: agents_workspace/lib/strategies/vwap_revert_strategy.ml
@@ -218,16 +245,14 @@ modules:
       - strategy_id : string
       - "parameter_specs : Parameters.t list"
       - "config_of_params : Parameters.value_map -> Vwap_revert_strategy.config"
-      - "session_window : Vwap_revert_strategy.config -> int * int"
-      - "qty : Vwap_revert_strategy.config -> float"
       - "cost : Vwap_revert_strategy.config -> Cost_model.config"
       - "with_cost : cost:Cost_model.config -> Vwap_revert_strategy.config -> Vwap_revert_strategy.config"
       - "with_s_entry : s_entry:float -> Vwap_revert_strategy.config -> Vwap_revert_strategy.config"
       - "with_z_exit : z_exit:float -> Vwap_revert_strategy.config -> Vwap_revert_strategy.config"
-      - "with_session : start:int -> end_:int -> Vwap_revert_strategy.config -> Vwap_revert_strategy.config"
-      - "with_qty : qty:float -> Vwap_revert_strategy.config -> Vwap_revert_strategy.config"
       - "pure_strategy : Vwap_revert_strategy.config -> Engine.pure_strategy"
       - strategy_pure : Engine.pure_strategy
+      - "legacy_strategy : Vwap_revert_strategy.config -> Engine.strategy"
+      - strategy : Engine.strategy
 
   - name: Strategy_fast
     file_ml: agents_workspace/lib/strategy_fast.ml
@@ -238,7 +263,7 @@ modules:
   - name: Policy_sig
     file_ml: agents_workspace/lib/engine/policy_sig.ml
     file_mli: agents_workspace/lib/engine/policy_sig.mli
-    summary: Policy callback signature for per-bar execution.
+    summary: Strategy policy callbacks for per-bar execution.
     provides_values: []
 
   - name: Strategy_sig
@@ -259,7 +284,7 @@ modules:
   - name: Engine
     file_ml: agents_workspace/lib/engine/engine.ml
     file_mli: agents_workspace/lib/engine/engine.mli
-    summary: Generic engine that runs pure Strategy_sig strategies with optional setup builders.
+    summary: Generic engine that runs either Policy_sig or pure Strategy_sig strategies with optional setup builders.
     provides_types:
       - Engine.strategy
       - Engine.pure_strategy
@@ -343,54 +368,6 @@ modules:
       - "render_daily_curve : outfile:string -> daily:(Date.t * float) list -> unit"
       - "render_histogram : outfile:string -> values:float array -> bins:int -> unit"
 
-  - name: Trade_transition_tests
-    file_ml: agents_workspace/tests/trade_transition_tests.ml
-    file_mli: null
-    summary: Inline expect tests for Trade_transition stop/target ordering and downgrade behavior.
-    provides_values: []
-
-  - name: Engine_pure_parity_tests
-    file_ml: agents_workspace/tests/engine_pure_parity_tests.ml
-    file_mli: null
-    summary: Verify pure strategies match configs built from default parameter maps.
-    provides_values: []
-
-  - name: Engine_backtest_parity_tests
-    file_ml: agents_workspace/tests/engine_backtest_parity_tests.ml
-    file_mli: null
-    summary: Ensure Backtest.run matches Engine.run_pure results for B1/B2.
-    provides_values: []
-
-  - name: Opt_algos_tests
-    file_ml: agents_workspace/tests/opt_algos_tests.ml
-    file_mli: null
-    summary: Check sampling algorithms respect bounds, integer flags, and coverage.
-    provides_values: []
-
-  - name: Regression_b1b2_tests
-    file_ml: agents_workspace/tests/regression_b1b2_tests.ml
-    file_mli: null
-    summary: Golden baseline for B1/B2 trades and PnL on sample_es.csv.
-    provides_values: []
-
-  - name: Optimizer_tests
-    file_ml: agents_workspace/tests/optimizer_tests.ml
-    file_mli: null
-    summary: Guardrail, caching, and Bayesian search behavior tests for Optimizer.run.
-    provides_values: []
-
-  - name: Multi_engine_shared_tests
-    file_ml: agents_workspace/tests/multi_engine_shared_tests.ml
-    file_mli: null
-    summary: Parity and determinism tests for Multi_engine shared-stream runners.
-    provides_values: []
-
-  - name: Property_determinism_tests
-    file_ml: agents_workspace/tests/property_determinism_tests.ml
-    file_mli: null
-    summary: Property test confirming bar permutation determinism for B1/B2 strategy.
-    provides_values: []
-
 signatures:
   - name: Policy_sig.S
     file_mli: agents_workspace/lib/engine/policy_sig.mli
@@ -401,7 +378,9 @@ signatures:
       - "init_day : Types.setup option -> t"
       - "on_bar : t -> Types.bar_1m -> t * Types.trade list"
       - "on_session_end : t -> Types.bar_1m option -> t * Types.trade list"
-    implemented_by: []
+    implemented_by:
+      - Strategy_b1b2 (via legacy_strategy)
+      - Vwap_revert_strategy (via legacy_strategy)
 
   - name: Strategy_sig.S
     file_mli: agents_workspace/lib/engine/strategy_sig.mli
@@ -413,8 +392,8 @@ signatures:
       - "step : Strategy_sig.env -> state -> Types.bar_1m -> state * Types.trade list"
       - "finalize_day : Strategy_sig.env -> state -> Types.bar_1m option -> state * Types.trade list"
     implemented_by:
-      - Strategy_b1b2.Pure
       - Vwap_revert_strategy.Pure
+      - Strategy_b1b2 (via pure_strategy)
 
   - name: Multi_engine.BAR_STREAM
     file_mli: agents_workspace/lib/engine/multi_engine.mli
@@ -422,7 +401,6 @@ signatures:
     types: []
     values:
       - "iter : f:(Types.bar_1m -> unit) -> unit"
-    implemented_by: []
 
 functors:
   - name: Vwap_revert_strategy.Pure
@@ -432,11 +410,23 @@ functors:
     type:
       params:
         - Cfg: { cfg: Vwap_revert_strategy.config }
-      result: Strategy_sig.S
+      result: module with type state = Vwap_revert_strategy.state and includes Strategy_sig.S
     param_signatures: []
     result_signature: Strategy_sig.S
 
 types:
+  - name: Types.trade
+    defined_in_module: Types
+    file_mli: null
+    description: Executed trade with entry/exit, qty, pnl (R/pts/USD/pct), and metadata.
+    representation: record
+
+  - name: Types.perf_stats
+    defined_in_module: Types
+    file_mli: null
+    description: Aggregate performance statistics (R, USD, pct) over trades and days.
+    representation: record
+
   - name: Types.direction
     defined_in_module: Types
     file_mli: null
@@ -485,12 +475,6 @@ types:
     description: Quality flag for B2 follow-through.
     representation: variant
 
-  - name: Types.trade
-    defined_in_module: Types
-    file_mli: null
-    description: Executed trade with entry/exit, qty, pnl (R/pts/USD/pct), and metadata.
-    representation: record
-
   - name: Types.trade_plan
     defined_in_module: Types
     file_mli: null
@@ -509,12 +493,6 @@ types:
     description: Trade lifecycle state machine.
     representation: variant
 
-  - name: Types.perf_stats
-    defined_in_module: Types
-    file_mli: null
-    description: Aggregate performance statistics (R, USD, pct) over trades and days.
-    representation: record
-
   - name: Parameters.Scale.t
     defined_in_module: Parameters
     file_mli: agents_workspace/lib/core/parameters.mli
@@ -532,18 +510,6 @@ types:
     file_mli: agents_workspace/lib/core/parameters.mli
     description: Map from parameter names to float values.
     representation: alias
-
-  - name: Strategy_common.Tunables.env_defaults
-    defined_in_module: Strategy_common
-    file_mli: agents_workspace/lib/strategies/strategy_common.mli
-    description: Default environment tuple (session window, qty, cost) for strategy surfaces.
-    representation: record
-
-  - name: Strategy_common.Tunables.param_field
-    defined_in_module: Strategy_common
-    file_mli: agents_workspace/lib/strategies/strategy_common.mli
-    description: Metadata for a tunable parameter (name, bounds, setter, flags).
-    representation: record
 
   - name: B1b2_params.t
     defined_in_module: B1b2_params
@@ -578,7 +544,7 @@ types:
   - name: Engine.strategy
     defined_in_module: Engine
     file_mli: agents_workspace/lib/engine/engine.mli
-    description: Strategy wired with optional setup builder and policy.
+    description: Strategy wired with optional setup builder and Policy_sig.S policy.
     representation: record
 
   - name: Engine.pure_strategy
@@ -609,13 +575,13 @@ types:
     defined_in_module: Strategy_b1b2
     file_mli: agents_workspace/lib/strategies/strategy_b1b2.mli
     description: Session window, qty, cost, and param configuration for B1/B2 strategy packaging.
-    representation: abstract
+    representation: record
 
   - name: Vwap_revert_strategy.config
     defined_in_module: Vwap_revert_strategy
     file_mli: agents_workspace/lib/strategies/vwap_revert_strategy.mli
     description: Parameter set for VWAP mean-reversion policy (features, risk, cost).
-    representation: abstract
+    representation: record
 
   - name: Features.state
     defined_in_module: Features
@@ -706,6 +672,7 @@ pipelines:
       - Plotter
     uses_signatures:
       - Strategy_sig.S
+      - Policy_sig.S
 
   - id: vwap_revert_cli
     module: Vwap_revert_main
@@ -723,6 +690,7 @@ pipelines:
       - Plotter
     uses_signatures:
       - Strategy_sig.S
+      - Policy_sig.S
 
   - id: optimize_cli
     module: Optimize_main
@@ -741,9 +709,8 @@ pipelines:
       - Stat_tests
       - Robustness
       - Summary
-      - Strategy_b1b2
-      - Vwap_revert_strategy
-    uses_signatures: []
+    uses_signatures:
+      - Strategy_sig.S
 
   - id: list_setup_days
     module: List_setup_days
@@ -751,7 +718,7 @@ pipelines:
     file_mli: null
     description: CLI to run B1/B2 pure strategy over a CSV and report setup days vs filtered-out days with hashes.
     signature: null
-    entry_value: main
+    entry_value: "(program)"
     entry_type: "string -> unit  # csv path via argv"
     uses_modules:
       - Strategy_fast

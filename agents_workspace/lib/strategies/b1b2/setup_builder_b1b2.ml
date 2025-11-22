@@ -3,12 +3,11 @@ open Types
 open Time_utils
 open Csv_parser
 open Indicators
-module C = B1b2_constants
-module P = B1b2_params
+module P = B1b2_params.Setup
 
 [@@@warning "-27-32-69"]
 
-let compute_daily_context_and_setups_with_params (params : P.t) filename : setup Date.Table.t =
+let build (params : P.t) filename : setup Date.Table.t =
   let day_macro_tbl : day_macro Date.Table.t = Date.Table.create () in
   let b1_tbl : bar_5m Date.Table.t = Date.Table.create () in
   let b2_tbl : bar_5m Date.Table.t = Date.Table.create () in
@@ -125,5 +124,4 @@ let compute_daily_context_and_setups_with_params (params : P.t) filename : setup
 
   setups_tbl
 
-let compute_daily_context_and_setups filename =
-  compute_daily_context_and_setups_with_params P.default filename
+let build_with_defaults filename = build P.defaults filename

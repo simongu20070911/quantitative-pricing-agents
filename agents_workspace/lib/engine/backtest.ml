@@ -21,38 +21,17 @@ module Policy_from_config (Cfg : sig
 
   let make_trade ~(plan : trade_plan) ~(active : active_state)
       ~(exit_ts : timestamp) ~(exit_price : float) ~(reason : exit_reason) =
-    let pnl_pts =
-      match plan.direction with
-      | Long  -> exit_price -. plan.entry_price
-      | Short -> plan.entry_price -. exit_price
-    in
-    let pnl_R = pnl_pts /. plan.r_pts in
-    let duration_min =
-      Float.of_int (exit_ts.minute_of_day - active.entry_ts.minute_of_day)
-    in
-    {
-      date         = exit_ts.date;
-      direction    = plan.direction;
-      entry_ts     = active.entry_ts;
-      exit_ts;
-      entry_price  = plan.entry_price;
-      exit_price;
-      qty          = 1.0;
-      r_pts        = plan.r_pts;
-      pnl_pts;
-      pnl_R;
-      pnl_usd      = 0.0;
-      pnl_pct      = None;
-      duration_min;
-      exit_reason  = reason;
-      meta         = [
+    Trade_base.make_raw
+      ~qty:1.0 ~r_pts:plan.r_pts ~direction:plan.direction
+      ~entry_ts:active.entry_ts ~entry_px:plan.entry_price
+      ~exit_ts ~exit_px:exit_price ~exit_reason:reason
+      ~meta:[
         ("target_mult", Float.to_string plan.target_mult);
         ("abr_prev", Float.to_string plan.abr_prev);
         ("b1_range", Float.to_string plan.b1_range);
         ("b2_follow",
          (match plan.b2_follow with Follow_good -> "good" | Follow_poor -> "poor"));
-      ];
-    }
+      ]
 
   let init_day setup_opt =
     match setup_opt with

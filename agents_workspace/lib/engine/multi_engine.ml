@@ -1,6 +1,7 @@
 open Core
 open Types
 open Engine
+module Pnl = Pnl_agg
 
 (* Results per strategy *)
 type run_result = {
@@ -29,47 +30,10 @@ let run_all_pure (strategies : Engine.pure_strategy list) ~(filename : string) :
       { strategy_id = strat._id; setups; trades; daily_pnl; daily_pnl_usd; daily_pnl_pct })
 
 (* Helpers shared by contexts *)
-type acc = {
-  trades : trade list;
-  daily_pnl : float Date.Map.t;
-  daily_pnl_usd : float Date.Map.t;
-  daily_pnl_pct : float Date.Map.t;
-}
+type acc = Pnl.t
 
-let empty_acc = {
-  trades = [];
-  daily_pnl = Date.Map.empty;
-  daily_pnl_usd = Date.Map.empty;
-  daily_pnl_pct = Date.Map.empty;
-}
-
-let add_trade acc t =
-  let daily_pnl =
-    Map.update acc.daily_pnl t.date ~f:(function
-        | None -> t.pnl_R
-        | Some x -> x +. t.pnl_R)
-  in
-  let daily_pnl_usd =
-    Map.update acc.daily_pnl_usd t.date ~f:(function
-        | None -> t.pnl_usd
-        | Some x -> x +. t.pnl_usd)
-  in
-  let daily_pnl_pct =
-    match t.pnl_pct with
-    | None -> acc.daily_pnl_pct
-    | Some pct ->
-        Map.update acc.daily_pnl_pct t.date ~f:(function
-            | None -> pct
-            | Some x -> x +. pct)
-  in
-  {
-    trades = t :: acc.trades;
-    daily_pnl;
-    daily_pnl_usd;
-    daily_pnl_pct;
-  }
-
-let flush_trades acc trades = List.fold trades ~init:acc ~f:add_trade
+let empty_acc = Pnl.empty
+let flush_trades = Pnl.add_trades
 
 (* Shared-bar runner using a GADT to keep policy state typed, but contexts are immutable records. *)
 type strat_ctx =
@@ -151,18 +115,11 @@ let finalize_all ctxs =
 
 let extract_result (Strat ctx) : run_result =
   let trades = List.rev ctx.acc.trades in
-  let daily_pnl =
-    Map.to_alist ctx.acc.daily_pnl
-    |> List.sort ~compare:(fun (d1, _) (d2, _) -> Date.compare d1 d2)
-  in
-  let daily_pnl_usd =
-    Map.to_alist ctx.acc.daily_pnl_usd
-    |> List.sort ~compare:(fun (d1, _) (d2, _) -> Date.compare d1 d2)
-  in
-  let daily_pnl_pct =
-    Map.to_alist ctx.acc.daily_pnl_pct
-    |> List.sort ~compare:(fun (d1, _) (d2, _) -> Date.compare d1 d2)
-  in
+  let daily_pnl, daily_pnl_usd, daily_pnl_pct = Pnl.to_alists_unsorted ctx.acc in
+  let sort = List.sort ~compare:(fun (d1, _) (d2, _) -> Date.compare d1 d2) in
+  let daily_pnl = sort daily_pnl in
+  let daily_pnl_usd = sort daily_pnl_usd in
+  let daily_pnl_pct = sort daily_pnl_pct in
   {
     strategy_id = ctx.strat.id;
     setups = ctx.setups;
@@ -279,18 +236,11 @@ let finalize_all_pure ctxs =
 
 let extract_result_pure (Pure_strat ctx) : run_result =
   let trades = List.rev ctx.acc.trades in
-  let daily_pnl =
-    Map.to_alist ctx.acc.daily_pnl
-    |> List.sort ~compare:(fun (d1, _) (d2, _) -> Date.compare d1 d2)
-  in
-  let daily_pnl_usd =
-    Map.to_alist ctx.acc.daily_pnl_usd
-    |> List.sort ~compare:(fun (d1, _) (d2, _) -> Date.compare d1 d2)
-  in
-  let daily_pnl_pct =
-    Map.to_alist ctx.acc.daily_pnl_pct
-    |> List.sort ~compare:(fun (d1, _) (d2, _) -> Date.compare d1 d2)
-  in
+  let daily_pnl, daily_pnl_usd, daily_pnl_pct = Pnl.to_alists_unsorted ctx.acc in
+  let sort = List.sort ~compare:(fun (d1, _) (d2, _) -> Date.compare d1 d2) in
+  let daily_pnl = sort daily_pnl in
+  let daily_pnl_usd = sort daily_pnl_usd in
+  let daily_pnl_pct = sort daily_pnl_pct in
   {
     strategy_id = ctx.strat._id;
     setups = ctx.setups;

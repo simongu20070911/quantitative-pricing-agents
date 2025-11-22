@@ -19,8 +19,8 @@ let sum_pnl trades = List.fold trades ~init:0.0 ~f:(fun acc t -> acc +. t.pnl_R)
 
 let%test_unit "backtest wrapper matches engine run for b1b2" =
   let fixture = find_fixture () in
-  let strat = Strategies.Strategy_b1b2.strategy in
-  let engine_res = Engine.Engine.run strat ~filename:fixture in
+  let strat = Strategies.Strategy_b1b2.strategy_pure in
+  let engine_res = Engine.Engine.run_pure strat ~filename:fixture in
   let setups = engine_res.setups in
   let cfg = Strategies.Strategy_b1b2.default_config in
   let module TB = Engine.Backtest in
@@ -33,7 +33,7 @@ let%test_unit "backtest wrapper matches engine run for b1b2" =
     trade_end_min = abr_eod_min;
     build_trade_plan = (fun setup ->
         Strategy_fast.Trade_logic.build_trade_plan
-          ~params:(Strategy_fast.Strategies.Strategy_b1b2.params Strategies.Strategy_b1b2.default_config)
+          ~params:((Strategy_fast.Strategies.Strategy_b1b2.params Strategies.Strategy_b1b2.default_config).exec)
           setup);
     on_plan_bar = (fun _ _ -> ());
   } in

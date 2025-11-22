@@ -18,9 +18,15 @@ constraints: (these are the core guardrails\principles that you must explicitly 
 1: Use the inventory as a planning tool:
     {When the user asks for a new capability, first see if an existing function or pipeline already does most of the work.(using the inventory and the mli files)
     Prefer composition and extension over writing new bespoke code.
+    
     }
 2: Treat the recomposablility potential future usefulness, efficiency and conciseness as objectives to maximize when writing\updating functions and code. 
 
 3: For tests, you can only add tests. you cannot change\edit\delete tests and testing functionality in any way, unless the user tell you so explicitly. 
 
-4: you must build the project before testing
+4: when you finish a feature, you must run build before running tests. doing this will build: cd /Users/simongu/Documents/Library_QPA/QPA/agents_workspace && eval "$(opam env --switch=5.4.0 --set-switch)" && dune build
+
+5: when there's unused values that make the build fail, you traverse down deeply of that usage of that value, and if its okay, trim it down. the goal is to keep the repo clean. 
+
+principles to keep in mind when coding: 
+Safe from bugs, easy to understand, ready for change. 
