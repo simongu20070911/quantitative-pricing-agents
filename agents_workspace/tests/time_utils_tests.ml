@@ -63,3 +63,8 @@ let%test_unit "plain timestamp without offset is rejected" =
   [%test_result: bool]
     (Exn.does_raise (fun () -> parse_exn "2020-01-01T10:00:00"))
     ~expect:true
+
+let%test_unit "legacy intraday format without seconds or offset is accepted" =
+  let ts = parse_exn "2020-06-15 09:30" in
+  assert (Date.equal ts.date (Date.of_string "2020-06-15"));
+  assert (ts.minute_of_day = 9 * 60 + 30)

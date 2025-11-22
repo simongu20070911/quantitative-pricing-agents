@@ -7,39 +7,43 @@ module P = B1b2_params.Setup
 
 [@@@warning "-27-32-69"]
 
-let build (params : P.t) filename : setup Date.Table.t =
-  let day_macro_tbl : day_macro Date.Table.t = Date.Table.create () in
-  let b1_tbl : bar_5m Date.Table.t = Date.Table.create () in
-  let b2_tbl : bar_5m Date.Table.t = Date.Table.create () in
-  let eod_abr_tbl : float Date.Table.t = Date.Table.create () in
+type agg_tables = {
+  day_macro_tbl : day_macro Date.Table.t;
+  b1_tbl : bar_5m Date.Table.t;
+  b2_tbl : bar_5m Date.Table.t;
+  eod_abr_tbl : float Date.Table.t;
+}
+
+let create_day_macro () =
+  { rth_high  = Float.neg_infinity;
+    rth_low   = Float.infinity;
+    rth_close = None;
+    has_rth   = false; }
+
+let init_aggregators (params : P.t) =
+  let day_macro_tbl = Date.Table.create () in
+  let b1_tbl = Date.Table.create () in
+  let b2_tbl = Date.Table.create () in
+  let eod_abr_tbl = Date.Table.create () in
   let abr_window = Abr.create ~n:params.abr_window_n in
   let current_5m : bar_5m option ref = ref None in
 
   let flush_5m (b : bar_5m) =
     let range = b.high -. b.low in
     Abr.update abr_window range;
-    let abr8_opt = Abr.value abr_window in
-    (match abr8_opt with
+    (match Abr.value abr_window with
      | Some abr when b.minute_of_day = abr_eod_min ->
          Hashtbl.set eod_abr_tbl ~key:b.date ~data:abr
      | _ -> ());
-    if b.minute_of_day = b1_min then
-      Hashtbl.set b1_tbl ~key:b.date ~data:b;
-    if b.minute_of_day = b2_min then
-      Hashtbl.set b2_tbl ~key:b.date ~data:b;
+    if b.minute_of_day = b1_min then Hashtbl.set b1_tbl ~key:b.date ~data:b;
+    if b.minute_of_day = b2_min then Hashtbl.set b2_tbl ~key:b.date ~data:b;
   in
 
   let process_bar (bar : bar_1m) =
     let { ts = { date; minute_of_day }; open_; high; low; close; _ } = bar in
 
     if minute_of_day >= rth_start_min && minute_of_day <= rth_end_min then begin
-      let macro =
-        Hashtbl.find_or_add day_macro_tbl date ~default:(fun () ->
-            { rth_high  = Float.neg_infinity;
-              rth_low   = Float.infinity;
-              rth_close = None;
-              has_rth   = false; })
-      in
+      let macro = Hashtbl.find_or_add day_macro_tbl date ~default:create_day_macro in
       macro.rth_high  <- Float.max macro.rth_high high;
       macro.rth_low   <- Float.min macro.rth_low low;
       macro.rth_close <- Some close;
@@ -49,35 +53,35 @@ let build (params : P.t) filename : setup Date.Table.t =
     let bucket_minute = (minute_of_day / 5) * 5 in
     match !current_5m with
     | None ->
-        current_5m :=
-          Some { date; minute_of_day = bucket_minute; open_; high; low; close }
+        current_5m := Some { date; minute_of_day = bucket_minute; open_; high; low; close }
+    | Some b5 when Date.equal date b5.date && bucket_minute = b5.minute_of_day ->
+        b5.high <- Float.max b5.high high;
+        b5.low  <- Float.min b5.low low;
+        b5.close <- close
     | Some b5 ->
-        if Date.equal date b5.date && bucket_minute = b5.minute_of_day then begin
-          b5.high <- Float.max b5.high high;
-          b5.low  <- Float.min b5.low low;
-          b5.close <- close
-        end else begin
-          flush_5m b5;
-          current_5m :=
-            Some { date; minute_of_day = bucket_minute; open_; high; low; close }
-        end
+        flush_5m b5;
+        current_5m := Some { date; minute_of_day = bucket_minute; open_; high; low; close }
   in
 
-  iter_bars filename ~f:process_bar;
-  Option.iter !current_5m ~f:flush_5m;
+  let finalize () =
+    Option.iter !current_5m ~f:flush_5m;
+    { day_macro_tbl; b1_tbl; b2_tbl; eod_abr_tbl }
+  in
+  process_bar, finalize
 
+let build_setups (params : P.t) (tables : agg_tables) : setup Date.Table.t =
   let setups_tbl : setup Date.Table.t = Date.Table.create () in
   let adr_window = Adr.create ~n:params.adr_window_n in
   let prev_close_opt : float option ref = ref None in
   let prev_eod_abr_opt : float option ref = ref None in
 
   let dates =
-    Hashtbl.keys day_macro_tbl
+    Hashtbl.keys tables.day_macro_tbl
     |> List.sort ~compare:Date.compare
   in
 
   List.iter dates ~f:(fun date ->
-      let macro = Hashtbl.find_exn day_macro_tbl date in
+      let macro = Hashtbl.find_exn tables.day_macro_tbl date in
       if macro.has_rth then begin
         let daily_range = macro.rth_high -. macro.rth_low in
         let adr21_opt = Adr.value adr_window in
@@ -85,8 +89,8 @@ let build (params : P.t) filename : setup Date.Table.t =
         let prev_close = !prev_close_opt in
         let abr_prev   = !prev_eod_abr_opt in
 
-        (match Hashtbl.find b1_tbl date,
-               Hashtbl.find b2_tbl date,
+        (match Hashtbl.find tables.b1_tbl date,
+               Hashtbl.find tables.b2_tbl date,
                prev_close, adr21_opt, abr_prev with
          | Some b1, Some b2, Some prev_close, Some adr21, Some abr_prev ->
              let gap_pts      = b1.open_ -. prev_close in
@@ -116,12 +120,16 @@ let build (params : P.t) filename : setup Date.Table.t =
 
         Adr.update adr_window daily_range;
 
-        prev_close_opt :=
-          Option.map macro.rth_close ~f:(fun c -> c);
-        prev_eod_abr_opt :=
-          Hashtbl.find eod_abr_tbl date
+        prev_close_opt := macro.rth_close;
+        prev_eod_abr_opt := Hashtbl.find tables.eod_abr_tbl date
       end);
 
   setups_tbl
+
+let build (params : P.t) filename : setup Date.Table.t =
+  let process_bar, finalize = init_aggregators params in
+  iter_bars filename ~f:process_bar;
+  let tables = finalize () in
+  build_setups params tables
 
 let build_with_defaults filename = build P.defaults filename

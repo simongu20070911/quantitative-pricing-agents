@@ -78,25 +78,153 @@ module Rolling_sum = struct
   let length t = Deque.length t.window
 end
 
-type state = {
-  mutable current_date   : Date.t option;
-  mutable cum_pv         : float;
-  mutable cum_v          : float;
-  mutable vwap           : float option;
-  mutable prev_close_rth : float option;
-  mutable overnight_high : float option;
-  mutable overnight_low  : float option;
-  mutable gap            : float option;
-  mutable last_close     : float option;
+module Vwap = struct
+  type t = {
+    mutable cum_pv : float;
+    mutable cum_v  : float;
+    mutable vwap   : float option;
+    dist_roll      : Rolling.t;
+  }
 
-  dist_roll    : Rolling.t;       (* deviations from VWAP for z-score *)
-  rv10_roll    : Rolling.t;       (* 1m returns over 10m window *)
-  rv60_roll    : Rolling.t;       (* 1m returns over 60m window *)
-  close_roll   : float Deque.t;   (* track last 61 closes for trend calc *)
-  ofi_s_short  : Rolling_sum.t;   (* signed volume short window *)
-  ofi_v_short  : Rolling_sum.t;   (* total volume short window *)
-  ofi_s_long   : Rolling_sum.t;   (* signed volume long window *)
-  ofi_v_long   : Rolling_sum.t;   (* total volume long window *)
+  let create () =
+    { cum_pv = 0.; cum_v = 0.; vwap = None; dist_roll = Rolling.create ~capacity:60 }
+
+  let reset t =
+    t.cum_pv <- 0.;
+    t.cum_v  <- 0.;
+    t.vwap   <- None;
+    Rolling.clear t.dist_roll
+
+  let update t ~close ~volume =
+    t.cum_pv <- t.cum_pv +. (close *. volume);
+    t.cum_v  <- t.cum_v  +. volume;
+    if Float.(t.cum_v > 0.) then t.vwap <- Some (t.cum_pv /. t.cum_v);
+    Option.iter t.vwap ~f:(fun vw -> Rolling.push t.dist_roll (close -. vw))
+
+  let z t ~close =
+    match t.vwap, Rolling.std t.dist_roll with
+    | Some vw, Some std when Float.(std > 0.) -> Some ((close -. vw) /. std)
+    | _ -> None
+end
+
+module Rv = struct
+  type t = {
+    rv10_roll : Rolling.t;
+    rv60_roll : Rolling.t;
+  }
+
+  let create () = { rv10_roll = Rolling.create ~capacity:10; rv60_roll = Rolling.create ~capacity:60 }
+
+  let reset t =
+    Rolling.clear t.rv10_roll;
+    Rolling.clear t.rv60_roll
+
+  let update t ~r1 =
+    Rolling.push t.rv10_roll r1;
+    Rolling.push t.rv60_roll r1
+
+  let rv10 t = Rolling.rms t.rv10_roll
+  let rv60 t = Rolling.rms t.rv60_roll
+end
+
+module Ofi = struct
+  type t = {
+    ofi_s_short : Rolling_sum.t;
+    ofi_v_short : Rolling_sum.t;
+    ofi_s_long  : Rolling_sum.t;
+    ofi_v_long  : Rolling_sum.t;
+  }
+
+  let create () = {
+    ofi_s_short = Rolling_sum.create ~capacity:2;
+    ofi_v_short = Rolling_sum.create ~capacity:2;
+    ofi_s_long  = Rolling_sum.create ~capacity:10;
+    ofi_v_long  = Rolling_sum.create ~capacity:10;
+  }
+
+  let reset t =
+    Rolling_sum.clear t.ofi_s_short;
+    Rolling_sum.clear t.ofi_v_short;
+    Rolling_sum.clear t.ofi_s_long;
+    Rolling_sum.clear t.ofi_v_long
+
+  let update t ~signed_volume ~volume =
+    Rolling_sum.push t.ofi_s_short signed_volume;
+    Rolling_sum.push t.ofi_v_short volume;
+    Rolling_sum.push t.ofi_s_long  signed_volume;
+    Rolling_sum.push t.ofi_v_long  volume
+
+  let ratio signed total =
+    match signed, total with
+    | Some s, Some v when Float.(v > 0.) -> Some (s /. v)
+    | _ -> None
+
+  let ofi_short t =
+    ratio (Rolling_sum.total t.ofi_s_short) (Rolling_sum.total t.ofi_v_short)
+
+  let ofi_long t =
+    ratio (Rolling_sum.total t.ofi_s_long) (Rolling_sum.total t.ofi_v_long)
+end
+
+module Trend = struct
+  type t = {
+    close_roll : float Deque.t; (* track last 61 closes *)
+  }
+
+  let create () = { close_roll = Deque.create () }
+
+  let reset t = Deque.clear t.close_roll
+
+  let update t ~close =
+    Deque.enqueue_back t.close_roll close;
+    if Deque.length t.close_roll > 61 then ignore (Deque.dequeue_front t.close_roll)
+
+  let value t ~rv60 ~last_close =
+    if Deque.length t.close_roll < 61 then None
+    else
+      match Deque.peek_front t.close_roll with
+      | None -> None
+      | Some old_close when Float.(rv60 > 0.) ->
+          Some (Float.abs (last_close -. old_close) /. rv60)
+      | _ -> None
+end
+
+module Overnight = struct
+  type t = {
+    mutable prev_close_rth : float option;
+    mutable overnight_high : float option;
+    mutable overnight_low  : float option;
+    mutable gap            : float option;
+  }
+
+  let create () =
+    { prev_close_rth = None; overnight_high = None; overnight_low = None; gap = None }
+
+  let reset_for_new_day t =
+    t.overnight_high <- None;
+    t.overnight_low  <- None;
+    t.gap <- None
+
+  let track_pre_rth t ~high ~low =
+    t.overnight_high <- Some (match t.overnight_high with None -> high | Some h -> Float.max h high);
+    t.overnight_low  <- Some (match t.overnight_low  with None -> low  | Some l -> Float.min l low)
+
+  let set_gap_at_open t ~open_price =
+    match t.prev_close_rth with
+    | Some c when Float.(c > 0.) -> t.gap <- Some (Float.log (open_price /. c))
+    | _ -> t.gap <- None
+
+  let set_prev_close t ~close = t.prev_close_rth <- Some close
+end
+
+type state = {
+  mutable current_date : Date.t option;
+  mutable last_close   : float option;
+  vwap     : Vwap.t;
+  rv       : Rv.t;
+  ofi      : Ofi.t;
+  trend    : Trend.t;
+  overnight: Overnight.t;
 }
 
 type snapshot = {
@@ -115,46 +243,31 @@ type snapshot = {
 
 let create () =
   { current_date = None;
-    cum_pv = 0.;
-    cum_v = 0.;
-    vwap = None;
-    prev_close_rth = None;
-    overnight_high = None;
-    overnight_low  = None;
-    gap = None;
-    last_close = None;
-    dist_roll = Rolling.create ~capacity:60;
-    rv10_roll = Rolling.create ~capacity:10;
-    rv60_roll = Rolling.create ~capacity:60;
-    close_roll = Deque.create ();
-    ofi_s_short = Rolling_sum.create ~capacity:2;
-    ofi_v_short = Rolling_sum.create ~capacity:2;
-    ofi_s_long  = Rolling_sum.create ~capacity:10;
-    ofi_v_long  = Rolling_sum.create ~capacity:10;
+    last_close   = None;
+    vwap     = Vwap.create ();
+    rv       = Rv.create ();
+    ofi      = Ofi.create ();
+    trend    = Trend.create ();
+    overnight= Overnight.create ();
   }
 
-let clear_intraday_state s =
-  s.cum_pv <- 0.;
-  s.cum_v  <- 0.;
-  s.vwap   <- None;
-  s.gap    <- None;
+let clear_intraday_state (s : state) =
+  Vwap.reset s.vwap;
+  Rv.reset s.rv;
+  Ofi.reset s.ofi;
+  Trend.reset s.trend;
   s.last_close <- None;
-  Rolling.clear s.dist_roll;
-  Rolling.clear s.rv10_roll;
-  Rolling.clear s.rv60_roll;
-  Deque.clear s.close_roll;
-  Rolling_sum.clear s.ofi_s_short;
-  Rolling_sum.clear s.ofi_v_short;
-  Rolling_sum.clear s.ofi_s_long;
-  Rolling_sum.clear s.ofi_v_long
+  s.overnight.gap <- None
 
-let update_date_if_needed s date =
+let update_date_if_needed (s : state) date =
   match s.current_date with
-  | None -> s.current_date <- Some date
+  | None ->
+      s.current_date <- Some date;
+      Overnight.reset_for_new_day s.overnight;
+      clear_intraday_state s
   | Some d when not (Date.equal d date) ->
       s.current_date <- Some date;
-      s.overnight_high <- None;
-      s.overnight_low  <- None;
+      Overnight.reset_for_new_day s.overnight;
       clear_intraday_state s
   | Some _ -> ()
 
@@ -170,53 +283,36 @@ let update s (bar : bar_1m) : state =
 
   (* Overnight tracking before RTH *)
   if minute_of_day < rth_start_min then begin
-    s.overnight_high <- Some (match s.overnight_high with None -> high | Some h -> Float.max h high);
-    s.overnight_low  <- Some (match s.overnight_low  with None -> low  | Some l -> Float.min l low)
+    Overnight.track_pre_rth s.overnight ~high ~low
   end;
 
   (* Reset intraday accumulators at RTH open and compute gap to prior close. *)
   if minute_of_day = rth_start_min then begin
     clear_intraday_state s;
-    (match s.prev_close_rth with
-     | Some c when Float.(c > 0.) -> s.gap <- Some (Float.log (close /. c))
-     | _ -> s.gap <- None)
+    Overnight.set_gap_at_open s.overnight ~open_price:close
   end;
 
   (* VWAP accumulation *)
-  s.cum_pv <- s.cum_pv +. (close *. volume);
-  s.cum_v  <- s.cum_v  +. volume;
-  if Float.(s.cum_v > 0.) then s.vwap <- Some (s.cum_pv /. s.cum_v);
+  Vwap.update s.vwap ~close ~volume;
 
   (* 1m return using previous close *)
   (match s.last_close with
    | Some prev ->
        let r1 = Float.log (close /. prev) in
-       Rolling.push s.rv10_roll r1;
-       Rolling.push s.rv60_roll r1
-   | None -> ());
-
-  (* VWAP deviation rolling window *)
-  (match s.vwap with
-   | Some vw ->
-       let dist = close -. vw in
-       Rolling.push s.dist_roll dist
+       Rv.update s.rv ~r1
    | None -> ());
 
   (* OFI approximation using signed volume *)
   (match s.last_close with
    | Some prev ->
        let sv = signed_volume ~prev_close:prev ~close ~volume in
-       Rolling_sum.push s.ofi_s_short sv;
-       Rolling_sum.push s.ofi_v_short volume;
-       Rolling_sum.push s.ofi_s_long  sv;
-       Rolling_sum.push s.ofi_v_long  volume
+       Ofi.update s.ofi ~signed_volume:sv ~volume
    | None -> ());
 
   (* Maintain close history for trend calc *)
-  Deque.enqueue_back s.close_roll close;
-  if Deque.length s.close_roll > 61 then ignore (Deque.dequeue_front s.close_roll);
+  Trend.update s.trend ~close;
 
-  if minute_of_day = rth_end_min then s.prev_close_rth <- Some close;
+  if minute_of_day = rth_end_min then Overnight.set_prev_close s.overnight ~close;
   s.last_close <- Some close;
   s
 
@@ -229,34 +325,30 @@ let snapshot (s : state) : snapshot =
   let base_price =
     match s.last_close with
     | Some c -> c
-    | None -> Option.value s.vwap ~default:0.0
+    | None -> Option.value s.vwap.vwap ~default:0.0
   in
-  let dist_onh = Option.map s.overnight_high ~f:(fun h -> base_price -. h) in
-  let dist_onl = Option.map s.overnight_low  ~f:(fun l -> base_price -. l) in
-  let rv10 = Rolling.rms s.rv10_roll in
-  let rv60 = Rolling.rms s.rv60_roll in
+  let dist_onh = Option.map s.overnight.overnight_high ~f:(fun h -> base_price -. h) in
+  let dist_onl = Option.map s.overnight.overnight_low  ~f:(fun l -> base_price -. l) in
+  let rv10 = Rv.rv10 s.rv in
+  let rv60 = Rv.rv60 s.rv in
   let rv_ratio =
     match rv10, rv60 with
     | Some a, Some b when Float.(b > 0.) -> Some (a /. b)
     | _ -> None
   in
   let z_vwap =
-    match s.vwap, s.last_close, Rolling.std s.dist_roll with
-    | Some vw, Some close, Some std when Float.(std > 0.) ->
-        Some ((close -. vw) /. std)
+    match s.last_close with
+    | None -> None
+    | Some close -> Vwap.z s.vwap ~close
+  in
+  let ofi_short = Ofi.ofi_short s.ofi in
+  let ofi_long  = Ofi.ofi_long s.ofi in
+  let trend =
+    match s.last_close, rv60 with
+    | Some close, Some rv -> Trend.value s.trend ~rv60:rv ~last_close:close
     | _ -> None
   in
-  let ofi_short = ofi_ratio (Rolling_sum.total s.ofi_s_short) (Rolling_sum.total s.ofi_v_short) in
-  let ofi_long  = ofi_ratio (Rolling_sum.total s.ofi_s_long)  (Rolling_sum.total s.ofi_v_long) in
-  let trend =
-    if Deque.length s.close_roll < 61 then None
-    else
-      match Deque.peek_front s.close_roll, s.last_close, rv60 with
-      | Some old_close, Some close, Some rv when Float.(rv > 0.) ->
-          Some (Float.abs (close -. old_close) /. rv)
-      | _ -> None
-  in
-  { vwap = s.vwap;
+  { vwap = s.vwap.vwap;
     z_vwap;
     ofi_short;
     ofi_long;
@@ -264,6 +356,6 @@ let snapshot (s : state) : snapshot =
     rv60;
     rv_ratio;
     trend;
-    gap = s.gap;
+    gap = s.overnight.gap;
     dist_onh;
     dist_onl; }
