@@ -2,7 +2,7 @@
 (library
  (name strategy_fast)
  (public_name qpa.strategy_fast)
- (libraries core cairo2 yojson)
+ (libraries core cairo2 yojson ptime)
  (preprocess (pps ppx_jane))
  (wrapped true))
 

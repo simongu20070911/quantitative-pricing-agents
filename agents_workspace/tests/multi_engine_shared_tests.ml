@@ -2,21 +2,7 @@ open Core
 open Strategy_fast
 open Types
 module E = Strategy_fast.Engine.Engine
-
-let find_fixture () =
-  let target = Filename.concat "agents_workspace" "sample_es.csv" in
-  let rec ascend n dir =
-    if n < 0 then None
-    else
-      let candidate = Filename.concat dir target in
-      if Stdlib.Sys.file_exists candidate then Some candidate
-      else ascend (n - 1) (Filename.dirname dir)
-  in
-  match ascend 6 (Stdlib.Sys.getcwd ()) with
-  | Some path -> path
-  | None ->
-      failwithf "Fixture missing: %s (searched upwards from %s)"
-        target (Stdlib.Sys.getcwd ()) ()
+module T = Test_utils
 
 let summary (r : Engine.Multi_engine.run_result) =
   let n = List.length r.trades in
@@ -25,7 +11,7 @@ let summary (r : Engine.Multi_engine.run_result) =
   (n, total_R, total_usd)
 
 let%test_unit "run_shared matches run_all for b1b2 on sample_es" =
-  let file = find_fixture () in
+  let file = T.find_fixture () in
   let strategies = [ Strategies.Strategy_b1b2.strategy_pure ] in
   let all = Engine.Multi_engine.run_all_pure strategies ~filename:file in
   let shared = Engine.Multi_engine.run_shared_pure strategies ~filename:file in
@@ -40,7 +26,7 @@ let%test_unit "run_shared matches run_all for b1b2 on sample_es" =
   | _ -> assert false
 
 let%test_unit "run_shared matches run_all for b1b2 + vwap on sample_es" =
-  let file = find_fixture () in
+  let file = T.find_fixture () in
   let strategies = [
     Strategies.Strategy_b1b2.strategy_pure;
     Strategies.Vwap_revert_strategy.strategy_pure;

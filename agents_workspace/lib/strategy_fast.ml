@@ -41,3 +41,4 @@ module Strategies = struct
 end
 
 module Trade_logic = Trade_logic
+module Strategy_registry = Strategy_registry

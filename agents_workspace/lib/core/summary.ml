@@ -3,15 +3,70 @@ open Types
 
 [@@@warning "-27-32-69"]
 
-let sharpe_of_series daily =
-  match daily with
+let mean xs =
+  match xs with
   | [] -> None
   | _ ->
-      let n = Float.of_int (List.length daily) in
-      let mean = List.fold daily ~init:0.0 ~f:( +. ) /. n in
-      let var = List.fold daily ~init:0.0 ~f:(fun acc x -> let d = x -. mean in acc +. d *. d) /. n in
-      let std = Float.sqrt var in
-      if Float.(std = 0.) then None else Some (Float.sqrt 252.0 *. (mean /. std))
+      let n = Float.of_int (List.length xs) in
+      Some (List.fold xs ~init:0.0 ~f:( +. ) /. n)
+
+let variance ?(sample = true) xs =
+  match xs with
+  | [] -> None
+  | _ ->
+      let n = List.length xs in
+      if sample && n < 2 then None
+      else
+        match mean xs with
+        | None -> None
+        | Some m ->
+            let denom = if sample then Float.of_int (n - 1) else Float.of_int n in
+            let v =
+              List.fold xs ~init:0.0 ~f:(fun acc x ->
+                  let d = x -. m in
+                  acc +. (d *. d))
+              /. denom
+            in
+            Some v
+
+let sharpe_of_series ?(sample_variance = true) daily =
+  match variance ~sample:sample_variance daily, mean daily with
+  | Some var, Some m when Float.(var > 0.) ->
+      Some (Float.sqrt 252.0 *. (m /. Float.sqrt var))
+  | _ -> None
+
+let skew_of_series xs =
+  (* Sample skewness; requires at least 3 points and non-zero variance. *)
+  if List.length xs < 3 then None
+  else
+    match mean xs, variance ~sample:true xs with
+    | Some m, Some var when Float.(var > 0.) ->
+        let n = Float.of_int (List.length xs) in
+        let m3 =
+          List.fold xs ~init:0.0 ~f:(fun acc x ->
+              let d = x -. m in
+              acc +. (d ** 3.))
+          /. n
+        in
+        Some (m3 /. Float.(var ** 1.5))
+    | _ -> None
+
+let max_drawdown daily =
+  (* daily: (Date.t * float) list assumed unsorted; we sort by date *)
+  let sorted = List.sort daily ~compare:(fun (d1, _) (d2, _) -> Date.compare d1 d2) in
+  let rec loop peak max_dd running = function
+    | [] -> max_dd
+    | (_, pnl) :: tl ->
+        let running = running +. pnl in
+        let peak = Float.max peak running in
+        let dd = peak -. running in
+        loop peak (Float.max max_dd dd) running tl
+  in
+  match sorted with
+  | [] -> None
+  | _ ->
+      let first_equity = 0.0 in
+      Some (loop first_equity 0.0 first_equity sorted)
 
 let compute_stats ?daily_usd ?daily_pct trades daily_pnl : perf_stats =
   let n_trades = List.length trades in
@@ -28,9 +83,9 @@ let compute_stats ?daily_usd ?daily_pct trades daily_pnl : perf_stats =
     if n_days = 0 then None, None
     else
       let daily_R = List.map daily_pnl ~f:snd in
-      let mean = List.fold daily_R ~init:0.0 ~f:( +. ) /. Float.of_int n_days in
+      let mean = mean daily_R in
       let sharpe = sharpe_of_series daily_R in
-      Some mean, sharpe
+      mean, sharpe
   in
   let avg_usd_per_day, ann_sharpe_usd =
     match daily_usd with
@@ -38,9 +93,9 @@ let compute_stats ?daily_usd ?daily_pct trades daily_pnl : perf_stats =
     | Some ds when List.is_empty ds -> None, None
     | Some ds ->
         let daily = List.map ds ~f:snd in
-        let mean = List.fold daily ~init:0.0 ~f:( +. ) /. Float.of_int (List.length daily) in
+        let mean = mean daily in
         let sharpe = sharpe_of_series daily in
-        Some mean, sharpe
+        mean, sharpe
   in
   let avg_pct_per_day, ann_sharpe_pct =
     match daily_pct with
@@ -48,15 +103,23 @@ let compute_stats ?daily_usd ?daily_pct trades daily_pnl : perf_stats =
     | Some ds when List.is_empty ds -> None, None
     | Some ds ->
         let vals = List.map ds ~f:snd in
-        let mean = List.fold vals ~init:0.0 ~f:( +. ) /. Float.of_int (List.length vals) in
+        let mean = mean vals in
         let sharpe = sharpe_of_series vals in
-        Some mean, sharpe
+        mean, sharpe
   in
   let expectancy_usd =
     if n_trades = 0 then None
     else
       let total_usd = List.fold trades ~init:0.0 ~f:(fun acc t -> acc +. t.pnl_usd) in
       Some (total_usd /. Float.of_int n_trades)
+  in
+  let max_dd_R = max_drawdown daily_pnl in
+  let max_dd_usd =
+    daily_usd |> Option.bind ~f:max_drawdown
+  in
+  let skew_R =
+    let daily = List.map daily_pnl ~f:snd in
+    skew_of_series daily
   in
   {
     n_trades;
@@ -70,6 +133,9 @@ let compute_stats ?daily_usd ?daily_pct trades daily_pnl : perf_stats =
     ann_sharpe_usd;
     avg_pct_per_day;
     ann_sharpe_pct;
+    max_drawdown_R = max_dd_R;
+    max_drawdown_usd = max_dd_usd;
+    skew_R;
   }
 
 let print_stats stats =
@@ -85,7 +151,10 @@ let print_stats stats =
   Option.iter stats.avg_usd_per_day ~f:(fun x -> printf "Average USD / day : $%.2f\n" x);
   Option.iter stats.ann_sharpe_usd ~f:(fun s -> printf "Ann. Sharpe (USD/day): %.2f\n" s);
   Option.iter stats.avg_pct_per_day ~f:(fun x -> printf "Average pct / day : %.4f%%\n" (x *. 100.));
-  Option.iter stats.ann_sharpe_pct ~f:(fun s -> printf "Ann. Sharpe (pct/day): %.2f\n" s)
+  Option.iter stats.ann_sharpe_pct ~f:(fun s -> printf "Ann. Sharpe (pct/day): %.2f\n" s);
+  Option.iter stats.max_drawdown_R ~f:(fun dd -> printf "Max drawdown (R)   : %.3f\n" dd);
+  Option.iter stats.max_drawdown_usd ~f:(fun dd -> printf "Max drawdown (USD) : $%.2f\n" dd);
+  Option.iter stats.skew_R ~f:(fun s -> printf "Skew (R/day)       : %.3f\n" s)
 
 let lookup_meta key meta =
   List.find_map meta ~f:(fun (k,v) -> if String.(k = key) then Some v else None)

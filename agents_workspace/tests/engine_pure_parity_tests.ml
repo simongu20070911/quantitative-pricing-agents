@@ -2,18 +2,7 @@ open Core
 open Strategy_fast
 open Types
 module E = Strategy_fast.Engine.Engine
-
-let find_fixture () =
-  let target = Filename.concat "agents_workspace" "sample_es.csv" in
-  let rec ascend n dir =
-    if n < 0 then None else
-      let candidate = Filename.concat dir target in
-      if Stdlib.Sys.file_exists candidate then Some candidate
-      else ascend (n-1) (Filename.dirname dir)
-  in
-  match ascend 6 (Stdlib.Sys.getcwd ()) with
-  | Some p -> p
-  | None -> failwith "fixture not found"
+module T = Test_utils
 
 let sum_pnl trades = List.fold trades ~init:0.0 ~f:(fun acc t -> acc +. t.pnl_R)
 
@@ -42,7 +31,7 @@ let run_with_default_params (s : 'c strat_surface) ~filename =
   E.run_pure (s.pure_strategy cfg) ~filename
 
 let%test_unit "b1b2 default params map matches default config" =
-  let file = find_fixture () in
+  let file = T.find_fixture () in
   let baseline = E.run_pure Strategies.Strategy_b1b2.strategy_pure ~filename:file in
   let via_params =
     run_with_default_params
@@ -57,7 +46,7 @@ let%test_unit "b1b2 default params map matches default config" =
   assert_same_runs baseline via_params
 
 let%test_unit "vwap default params map matches default config" =
-  let file = find_fixture () in
+  let file = T.find_fixture () in
   let baseline = E.run_pure Strategies.Vwap_revert_strategy.strategy_pure ~filename:file in
   let via_params =
     run_with_default_params

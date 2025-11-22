@@ -10,8 +10,16 @@ let make_raw ~qty ~r_pts ~(direction : direction)
     | Short -> entry_px -. exit_px
   in
   let pnl_R = pnl_pts /. r_pts in
+  let day_diff = Date.diff exit_ts.date entry_ts.date in
   let duration_min =
-    Float.of_int (exit_ts.minute_of_day - entry_ts.minute_of_day)
+    let minutes =
+      (day_diff * Time_utils.minutes_per_day)
+      + (exit_ts.minute_of_day - entry_ts.minute_of_day)
+    in
+    if minutes < 0 then
+      invalid_arg "make_raw: exit timestamp precedes entry timestamp"
+    else
+      Float.of_int minutes
   in
   {
     date = exit_ts.date;

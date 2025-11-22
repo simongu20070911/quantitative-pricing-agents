@@ -108,11 +108,6 @@ let step_ctx (Strat ctx0) (bar : bar_1m) : strat_ctx =
       let acc = flush_trades ctx.acc trades in
       Strat { ctx with state = Some st'; last_session_bar; acc }
 
-let finalize_all ctxs =
-  List.map ctxs ~f:(fun ctx ->
-      let Strat c = finalize_day ctx in
-      Strat c)
-
 let extract_result (Strat ctx) : run_result =
   let trades = List.rev ctx.acc.trades in
   let daily_pnl, daily_pnl_usd, daily_pnl_pct = Pnl.to_alists_unsorted ctx.acc in
@@ -129,21 +124,49 @@ let extract_result (Strat ctx) : run_result =
     daily_pnl_pct;
   }
 
+(* Generic driver to eliminate duplicate shared-stream logic. *)
+module type CTX = sig
+  type t
+  type strat
+
+  val init : strat -> setups:setup Date.Table.t -> t
+  val step : t -> bar_1m -> t
+  val finalize_day : t -> t
+  val extract : t -> run_result
+end
+
+let run_shared_generic
+    (type s)
+    (module C : CTX with type strat = s)
+    ~(iter : (bar_1m -> unit) -> unit)
+    ~(make_setups : s -> setup Date.Table.t)
+    (strategies : s list) : run_result list =
+  let ctxs =
+    List.map strategies ~f:(fun strat ->
+        C.init strat ~setups:(make_setups strat))
+  in
+  let ctxs_ref = ref ctxs in
+  iter (fun bar ->
+      ctxs_ref := List.map !ctxs_ref ~f:(fun ctx -> C.step ctx bar));
+  ctxs_ref := List.map !ctxs_ref ~f:C.finalize_day;
+  List.map !ctxs_ref ~f:C.extract
+
 let run_shared_with_stream ~(stream : (module BAR_STREAM))
     ~(make_setups : Engine.strategy -> setup Date.Table.t)
     (strategies : Engine.strategy list)
   : run_result list =
-  let ctxs =
-    List.map strategies ~f:(fun s ->
-        let setups = make_setups s in
-        init_ctx s ~setups)
-  in
-  let ctxs_ref = ref ctxs in
   let module Stream = (val stream : BAR_STREAM) in
-  Stream.iter ~f:(fun bar ->
-      ctxs_ref := List.map !ctxs_ref ~f:(fun ctx -> step_ctx ctx bar));
-  ctxs_ref := finalize_all !ctxs_ref;
-  List.map !ctxs_ref ~f:extract_result
+  let module C = struct
+    type strat = Engine.strategy
+    type t = strat_ctx
+    let init = init_ctx
+    let step = step_ctx
+    let finalize_day = finalize_day
+    let extract = extract_result
+  end in
+  run_shared_generic (module C)
+    ~iter:(fun g -> Stream.iter ~f:g)
+    ~make_setups strategies
 
 let run_shared (strategies : Engine.strategy list) ~(filename : string)
   : run_result list =
@@ -229,11 +252,6 @@ let step_pure_ctx (Pure_strat ctx0) (bar : bar_1m) : pure_ctx =
       let acc = flush_trades ctx.acc trades in
       Pure_strat { ctx with state = Some st'; last_session_bar; acc }
 
-let finalize_all_pure ctxs =
-  List.map ctxs ~f:(fun ctx ->
-      let Pure_strat c = finalize_day_pure ctx in
-      Pure_strat c)
-
 let extract_result_pure (Pure_strat ctx) : run_result =
   let trades = List.rev ctx.acc.trades in
   let daily_pnl, daily_pnl_usd, daily_pnl_pct = Pnl.to_alists_unsorted ctx.acc in
@@ -257,13 +275,17 @@ let run_shared_pure (strategies : Engine.pure_strategy list) ~(filename : string
     | None -> Date.Table.create ()
     | Some f -> f filename
   in
-  let ctxs =
-    List.map strategies ~f:(fun s ->
-        let setups = make_setups s in
-        init_pure_ctx s ~setups)
-  in
-  let ctxs_ref = ref ctxs in
-  Csv_parser.iter_bars filename ~f:(fun bar ->
-      ctxs_ref := List.map !ctxs_ref ~f:(fun ctx -> step_pure_ctx ctx bar));
-  ctxs_ref := finalize_all_pure !ctxs_ref;
-  List.map !ctxs_ref ~f:extract_result_pure
+  let module Csv_stream = struct
+    let iter ~f = Csv_parser.iter_bars filename ~f
+  end in
+  let module C = struct
+    type strat = Engine.pure_strategy
+    type t = pure_ctx
+    let init = init_pure_ctx
+    let step = step_pure_ctx
+    let finalize_day = finalize_day_pure
+    let extract = extract_result_pure
+  end in
+  run_shared_generic (module C)
+    ~iter:(fun g -> Csv_stream.iter ~f:g)
+    ~make_setups strategies

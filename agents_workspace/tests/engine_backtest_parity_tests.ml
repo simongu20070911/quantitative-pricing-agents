@@ -1,24 +1,12 @@
 open Core
 open Strategy_fast
 open Types
-
-let find_fixture () =
-  let target = Filename.concat "agents_workspace" "sample_es.csv" in
-  let rec ascend n dir =
-    if n < 0 then None
-    else
-      let candidate = Filename.concat dir target in
-      if Stdlib.Sys.file_exists candidate then Some candidate
-      else ascend (n - 1) (Filename.dirname dir)
-  in
-  match ascend 6 (Stdlib.Sys.getcwd ()) with
-  | Some path -> path
-  | None -> failwithf "Fixture missing: %s" target ()
+module T = Test_utils
 
 let sum_pnl trades = List.fold trades ~init:0.0 ~f:(fun acc t -> acc +. t.pnl_R)
 
 let%test_unit "backtest wrapper matches engine run for b1b2" =
-  let fixture = find_fixture () in
+  let fixture = T.find_fixture () in
   let strat = Strategies.Strategy_b1b2.strategy_pure in
   let engine_res = Engine.Engine.run_pure strat ~filename:fixture in
   let setups = engine_res.setups in

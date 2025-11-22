@@ -109,6 +109,20 @@ let metric_of_objective objective trades =
 
 let sample_params specs = Parameters.default_map specs
 
+let safe_hd = function
+  | [] -> None
+  | x :: _ -> Some x
+
+let max_by_score candidates =
+  match candidates with
+  | [] -> None
+  | _ ->
+      List.max_elt candidates ~compare:(fun a b -> Float.compare a.score b.score)
+
+let fallback_params specs =
+  (* Deterministic fallback for empty samplers. *)
+  sample_params specs
+
 let key_of_params params =
   params
   |> Map.to_alist
@@ -199,19 +213,34 @@ let robustness_pass _cand params cand_score =
       let accepted = ref [] in
       let propose () =
         match !accepted with
-        | [] -> Alg.random_uniform job.specs ~samples:1 ~seed:(Random.State.int state 1_000_000) |> List.hd_exn
+        | [] ->
+            let sampled =
+              Alg.random_uniform job.specs ~samples:1
+                ~seed:(Random.State.int state 1_000_000)
+            in
+            Option.value (safe_hd sampled) ~default:(fallback_params job.specs)
         | xs ->
-            let sorted = List.sort xs ~compare:(fun (_p1, s1) (_p2, s2) -> Float.compare s2 s1) in
+            let sorted =
+              List.sort xs ~compare:(fun (_p1, s1) (_p2, s2) -> Float.compare s2 s1)
+            in
             let n_good = Int.max 1 (Float.to_int (gamma *. Float.of_int (List.length sorted))) in
             let good = List.take sorted n_good in
-            let (center, _) = List.random_element_exn ~random_state:state good in
+            let center =
+              match List.random_element ~random_state:state good with
+              | None -> fallback_params job.specs
+              | Some (c, _) -> c
+            in
             Alg.perturb_around ~center ~specs:job.specs ~sigma_frac:0.05
               ~seed:(Random.State.int state 1_000_000)
       in
       for i = 0 to samples - 1 do
         let params =
           if i < init then
-            Alg.random_uniform job.specs ~samples:1 ~seed:(Random.State.int state 1_000_000) |> List.hd_exn
+            let sampled =
+              Alg.random_uniform job.specs ~samples:1
+                ~seed:(Random.State.int state 1_000_000)
+            in
+            Option.value (safe_hd sampled) ~default:(fallback_params job.specs)
           else propose ()
         in
         let cand = eval_with_cache params in
@@ -224,11 +253,12 @@ let robustness_pass _cand params cand_score =
   | _ -> ());
 
   let best =
-    match !collected with
-    | [] ->
-        let fallback = eval_with_cache (sample_params job.specs) in
+    match max_by_score !collected with
+    | Some b -> b
+    | None ->
+        let fallback_params_v = fallback_params job.specs in
+        let fallback = eval_with_cache fallback_params_v in
         { fallback with score = metric_of_objective job.objective fallback.trades }
-    | xs -> List.max_elt xs ~compare:(fun a b -> Float.compare a.score b.score) |> Option.value_exn
   in
   {
     best;

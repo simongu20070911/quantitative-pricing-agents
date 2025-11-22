@@ -125,4 +125,7 @@ type perf_stats = {
   ann_sharpe_usd : float option;
   avg_pct_per_day: float option;
   ann_sharpe_pct : float option;
+  max_drawdown_R : float option;
+  max_drawdown_usd : float option;
+  skew_R : float option;
 }

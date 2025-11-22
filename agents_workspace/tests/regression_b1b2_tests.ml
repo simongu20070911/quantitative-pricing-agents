@@ -1,21 +1,9 @@
 open Core
 open Strategy_fast
-
-let find_fixture () =
-  let target = Filename.concat "agents_workspace" "sample_es.csv" in
-  let rec ascend n dir =
-    if n < 0 then None
-    else
-      let candidate = Filename.concat dir target in
-      if Stdlib.Sys.file_exists candidate then Some candidate
-      else ascend (n - 1) (Filename.dirname dir)
-  in
-  match ascend 6 (Stdlib.Sys.getcwd ()) with
-  | Some path -> path
-  | None -> failwithf "Fixture missing: %s (searched upwards from %s)" target (Stdlib.Sys.getcwd ()) ()
+module T = Test_utils
 
 let%test_unit "b1b2 matches golden baseline on sample_es fixture" =
-  let sample_file = find_fixture () in
+  let sample_file = T.find_fixture () in
   let strat = Strategies.Strategy_b1b2.strategy_pure in
   let r = Engine.Engine.run_pure strat ~filename:sample_file in
   let trades = r.trades in

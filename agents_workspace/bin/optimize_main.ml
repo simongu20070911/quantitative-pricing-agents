@@ -18,33 +18,6 @@ module Opt = Engine.Optimizer
    }
 *)
 
-type strat_pack = {
-  id : string;
-  specs : Parameters.t list;
-  build : Parameters.value_map -> Engine.Engine.pure_strategy;
-}
-
-let strat_registry : strat_pack list =
-  [
-    {
-      id = Strategies.Strategy_b1b2.strategy_id;
-      specs = Strategies.Strategy_b1b2.parameter_specs;
-      build = (fun params ->
-          let cfg = Strategies.Strategy_b1b2.config_of_params params in
-          Strategies.Strategy_b1b2.pure_strategy cfg);
-    };
-    {
-      id = Strategies.Vwap_revert_strategy.strategy_id;
-      specs = Strategies.Vwap_revert_strategy.parameter_specs;
-      build = (fun params ->
-          let cfg = Strategies.Vwap_revert_strategy.config_of_params params in
-          Strategies.Vwap_revert_strategy.pure_strategy cfg);
-    };
-  ]
-
-let find_strategy id =
-  List.find_exn strat_registry ~f:(fun s -> String.equal s.id id)
-
 let parse_search json =
   let open Yojson.Safe.Util in
   let kind = json |> member "type" |> to_string in
@@ -117,7 +90,7 @@ let run_job ~job_file =
   in
   if not (Stdlib.Sys.file_exists datafile) then
     failwithf "data file %s not found" datafile ();
-  let strat_pack = find_strategy strategy_id in
+  let strat_pack = Strategy_registry.find_exn strategy_id in
   let guardrails = Guardrails.load ~strategy_id () |> Result.ok_or_failwith in
   let job = {
     Opt.strategy_id = strategy_id;

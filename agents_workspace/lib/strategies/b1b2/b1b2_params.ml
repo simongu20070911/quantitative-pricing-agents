@@ -2,6 +2,12 @@ open Core
 
 module T = Strategy_common.Tunables
 
+let int_flag = true
+let fl_flag = false
+
+let clamp_int ~min ~max v =
+  v |> Int.of_float |> Int.clamp_exn ~min ~max
+
 module Setup = struct
   type t = {
     climactic_range_factor : float;
@@ -17,31 +23,29 @@ module Setup = struct
   type field = t T.param_field
 
   let param_table : field list =
-    let int = true and fl = false in
-    let clamp_int ~min ~max v = v |> Int.of_float |> Int.clamp_exn ~min ~max in
     [
-      { name = "climactic_range_factor"; default = 2.5; bounds = (1.0, 5.0); integer = fl; tunable = true;
+      { name = "climactic_range_factor"; default = 2.5; bounds = (1.0, 5.0); integer = fl_flag; tunable = true;
         description = "max B1 range / ABR_prev to be valid";
         set = (fun p v -> { p with climactic_range_factor = v }) };
-      { name = "gap_min_pct_adr"; default = 11.0; bounds = (0., 100.); integer = fl; tunable = true;
+      { name = "gap_min_pct_adr"; default = 11.0; bounds = (0., 100.); integer = fl_flag; tunable = true;
         description = "min |gap| %% ADR to qualify";
         set = (fun p v -> { p with gap_min_pct_adr = v }) };
-      { name = "gap_max_pct_adr"; default = 60.0; bounds = (0., 100.); integer = fl; tunable = true;
+      { name = "gap_max_pct_adr"; default = 60.0; bounds = (0., 100.); integer = fl_flag; tunable = true;
         description = "max |gap| %% ADR to qualify";
         set = (fun p v -> { p with gap_max_pct_adr = v }) };
-      { name = "body_pct_min"; default = 0.5; bounds = (0., 1.); integer = fl; tunable = true;
+      { name = "body_pct_min"; default = 0.5; bounds = (0., 1.); integer = fl_flag; tunable = true;
         description = "min body/range for trend";
         set = (fun p v -> { p with body_pct_min = v }) };
-      { name = "ibs_bull_min"; default = 0.69; bounds = (0., 1.); integer = fl; tunable = true;
+      { name = "ibs_bull_min"; default = 0.69; bounds = (0., 1.); integer = fl_flag; tunable = true;
         description = "IBS threshold bullish";
         set = (fun p v -> { p with ibs_bull_min = v }) };
-      { name = "ibs_bear_max"; default = 0.31; bounds = (0., 1.); integer = fl; tunable = true;
+      { name = "ibs_bear_max"; default = 0.31; bounds = (0., 1.); integer = fl_flag; tunable = true;
         description = "IBS threshold bearish";
         set = (fun p v -> { p with ibs_bear_max = v }) };
-      { name = "abr_window_n"; default = 8.; bounds = (4., 50.); integer = int; tunable = false;
+      { name = "abr_window_n"; default = 8.; bounds = (4., 50.); integer = int_flag; tunable = false;
         description = "ABR rolling window length";
         set = (fun p v -> { p with abr_window_n = clamp_int ~min:1 ~max:120 v }) };
-      { name = "adr_window_n"; default = 21.; bounds = (4., 50.); integer = int; tunable = false;
+      { name = "adr_window_n"; default = 21.; bounds = (4., 50.); integer = int_flag; tunable = false;
         description = "ADR rolling window length";
         set = (fun p v -> { p with adr_window_n = clamp_int ~min:1 ~max:120 v }) };
     ]
@@ -77,22 +81,20 @@ module Exec = struct
   type field = t T.param_field
 
   let param_table : field list =
-    let int = true and fl = false in
-    let clamp_int ~min ~max v = v |> Int.of_float |> Int.clamp_exn ~min ~max in
     [
-      { name = "tick_size"; default = 0.25; bounds = (0.01, 1.); integer = fl; tunable = false;
+      { name = "tick_size"; default = 0.25; bounds = (0.01, 1.); integer = fl_flag; tunable = false;
         description = "minimum price increment";
         set = (fun p v -> { p with tick_size = v }) };
-      { name = "tick_value"; default = 12.5; bounds = (1., 100.); integer = fl; tunable = false;
+      { name = "tick_value"; default = 12.5; bounds = (1., 100.); integer = fl_flag; tunable = false;
         description = "USD value per tick per contract";
         set = (fun p v -> { p with tick_value = v }) };
-      { name = "be_trigger_mult"; default = 0.8; bounds = (0.1, 1.0); integer = fl; tunable = true;
+      { name = "be_trigger_mult"; default = 0.8; bounds = (0.1, 1.0); integer = fl_flag; tunable = true;
         description = "break-even trigger in R";
         set = (fun p v -> { p with be_trigger_mult = v }) };
-      { name = "downgrade_cutoff_offset_min"; default = 4.; bounds = (0., 30.); integer = int; tunable = true;
+      { name = "downgrade_cutoff_offset_min"; default = 4.; bounds = (0., 30.); integer = int_flag; tunable = true;
         description = "minutes after B2 before downgrade ends";
         set = (fun p v -> { p with downgrade_cutoff_offset_min = clamp_int ~min:0 ~max:120 v }) };
-      { name = "two_r_range_factor"; default = 1.5; bounds = (0.5, 3.0); integer = fl; tunable = true;
+      { name = "two_r_range_factor"; default = 1.5; bounds = (0.5, 3.0); integer = fl_flag; tunable = true;
         description = "max B1 range / ABR_prev to allow 2R target";
         set = (fun p v -> { p with two_r_range_factor = v }) };
     ]
