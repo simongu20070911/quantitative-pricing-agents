@@ -42,50 +42,80 @@ let default_config = {
 
 let strategy_id = "vwap_revert"
 
-let parameter_specs =
+type param_field = {
+  name : string;
+  default : float;
+  bounds : float * float;
+  integer : bool;
+  tunable : bool;
+  description : string;
+  set : config -> float -> config;
+}
+
+let param_table : param_field list =
+  let int = true and fl = false in
   [
-    Parameters.make ~name:"a1" ~default:1.0 ~bounds:(0., 5.)
-      ~description:"scale on z-score distance from VWAP" ();
-    Parameters.make ~name:"a2" ~default:0.5 ~bounds:(0., 5.)
-      ~description:"OFI exhaustion term weight" ();
-    Parameters.make ~name:"b1" ~default:0.5 ~bounds:(0., 5.)
-      ~description:"volatility penalty" ();
-    Parameters.make ~name:"b2" ~default:0.5 ~bounds:(0., 5.)
-      ~description:"trend penalty" ();
-    Parameters.make ~name:"s_entry" ~default:0.7 ~bounds:(0.1, 3.0)
-      ~description:"signal threshold to open a trade" ();
-    Parameters.make ~name:"z_exit" ~default:0.2 ~bounds:(0., 1.0)
-      ~description:"VWAP reversion exit band" ();
-    Parameters.make ~name:"time_stop_min" ~default:10. ~bounds:(1., 120.)
-      ~integer:true ~description:"time-based exit in minutes" ();
-    Parameters.make ~name:"stop_ticks" ~default:6.0 ~bounds:(1., 30.)
-      ~description:"hard stop distance in ticks" ();
-    Parameters.make ~name:"max_units" ~default:3. ~bounds:(1., 10.)
-      ~integer:true ~description:"cap on volatility-targeted units" ();
+    { name = "a1"; default = default_config.a1; bounds = (0., 5.); integer = fl; tunable = true;
+      description = "scale on z-score distance from VWAP";
+      set = (fun cfg v -> { cfg with a1 = v }) };
+    { name = "a2"; default = default_config.a2; bounds = (0., 5.); integer = fl; tunable = true;
+      description = "OFI exhaustion term weight";
+      set = (fun cfg v -> { cfg with a2 = v }) };
+    { name = "b1"; default = default_config.b1; bounds = (0., 5.); integer = fl; tunable = true;
+      description = "volatility penalty";
+      set = (fun cfg v -> { cfg with b1 = v }) };
+    { name = "b2"; default = default_config.b2; bounds = (0., 5.); integer = fl; tunable = true;
+      description = "trend penalty";
+      set = (fun cfg v -> { cfg with b2 = v }) };
+    { name = "s_entry"; default = default_config.s_entry; bounds = (0.1, 3.0); integer = fl; tunable = true;
+      description = "signal threshold to open a trade";
+      set = (fun cfg v -> { cfg with s_entry = v }) };
+    { name = "z_exit"; default = default_config.z_exit; bounds = (0., 1.0); integer = fl; tunable = true;
+      description = "VWAP reversion exit band";
+      set = (fun cfg v -> { cfg with z_exit = v }) };
+    { name = "time_stop_min"; default = Float.of_int default_config.time_stop_min; bounds = (1., 240.); integer = int; tunable = true;
+      description = "time-based exit in minutes";
+      set = (fun cfg v ->
+          let v' = v |> Int.of_float |> Int.clamp_exn ~min:1 ~max:240 in
+          { cfg with time_stop_min = v' }) };
+    { name = "stop_ticks"; default = default_config.stop_ticks; bounds = (1., 30.); integer = fl; tunable = true;
+      description = "hard stop distance in ticks";
+      set = (fun cfg v -> { cfg with stop_ticks = v }) };
+    { name = "max_units"; default = Float.of_int default_config.max_units; bounds = (1., 10.); integer = int; tunable = true;
+      description = "cap on volatility-targeted units";
+      set = (fun cfg v ->
+          let v' = v |> Int.of_float |> Int.clamp_exn ~min:1 ~max:100 in
+          { cfg with max_units = v' }) };
+    { name = "cost.slippage_roundtrip_ticks"; default = default_config.cost.slippage_roundtrip_ticks; bounds = (0., 3.); integer = fl; tunable = true;
+      description = "assumed round-trip slippage in ticks";
+      set = (fun cfg v -> { cfg with cost = { cfg.cost with slippage_roundtrip_ticks = v } }) };
+    { name = "cost.fee_per_contract"; default = default_config.cost.fee_per_contract; bounds = (0., 10.); integer = fl; tunable = true;
+      description = "exchange+broker fee per contract";
+      set = (fun cfg v -> { cfg with cost = { cfg.cost with fee_per_contract = v } }) };
+    { name = "cost.equity_base"; default = Option.value default_config.cost.equity_base ~default:0.; bounds = (0., 5_000_000.); integer = fl; tunable = false;
+      description = "account equity in USD for pct PnL; 0 disables";
+      set = (fun cfg v ->
+          let eb = if Float.(v <= 0.) then None else Some v in
+          { cfg with cost = { cfg.cost with equity_base = eb } }) };
   ]
-  @ SC.Config.cost_params default_config.cost
+
+let parameter_specs =
+  param_table
+  |> List.filter ~f:(fun p -> p.tunable)
+  |> List.map ~f:(fun p ->
+      Parameters.make ~name:p.name ~default:p.default ~bounds:p.bounds
+        ~integer:p.integer ~description:p.description ())
 
 let config_of_params (m : Parameters.value_map) : config =
-  let get name default = Map.find m name |> Option.value ~default in
-  let cost = SC.Config.cost_of_params ~defaults:default_config.cost m in
-  {
-    a1 = get "a1" default_config.a1;
-    a2 = get "a2" default_config.a2;
-    b1 = get "b1" default_config.b1;
-    b2 = get "b2" default_config.b2;
-    s_entry = get "s_entry" default_config.s_entry;
-    z_exit = get "z_exit" default_config.z_exit;
-    time_stop_min =
-      get "time_stop_min" (Float.of_int default_config.time_stop_min)
-      |> Int.of_float
-      |> Int.clamp_exn ~min:1 ~max:240;
-    stop_ticks = get "stop_ticks" default_config.stop_ticks;
-    max_units =
-      get "max_units" (Float.of_int default_config.max_units)
-      |> Int.of_float
-      |> Int.clamp_exn ~min:1 ~max:100;
-    cost;
-  }
+  List.fold param_table ~init:default_config ~f:(fun cfg p ->
+      match Map.find m p.name with
+      | None -> cfg
+      | Some v -> p.set cfg v)
+
+let cost cfg = cfg.cost
+let with_cost ~cost cfg = { cfg with cost }
+let with_s_entry ~s_entry cfg = { cfg with s_entry }
+let with_z_exit ~z_exit cfg = { cfg with z_exit }
 
 type position =
   | Flat
@@ -268,37 +298,7 @@ module Pure (Cfg : sig val cfg : config end) : SS.S with type state = state = st
   let finalize_day (_env : SS.env) st last_bar = on_session_end st last_bar
 end
 
-module Policy_of_pure (Cfg : sig val cfg : config end) : Policy_sig.S = struct
-  module P = Pure(Cfg)
-  type t = P.state
-
-  let env = {
-    SS.session_start_min = rth_start_min;
-    session_end_min = rth_end_min;
-    qty = 1.0; (* not used; sizing handled internally *)
-    cost = Cfg.cfg.cost;
-  }
-
-  let init_day setup_opt = P.init setup_opt
-  let on_bar st bar =
-    let st', trades = P.step env st bar in
-    st', trades
-  let on_session_end st last_bar = P.finalize_day env st last_bar
-end
-
-let make_strategy config =
-  let module M = Policy_of_pure(struct let cfg = config end) in
-  {
-    Engine.id = strategy_id;
-    session_start_min = rth_start_min;
-    session_end_min = rth_end_min;
-    build_setups = None;
-    policy = (module M);
-  }
-
-let strategy = make_strategy default_config
-
-let make_pure_strategy cfg =
+let pure_strategy cfg =
   let env = {
     SS.session_start_min = rth_start_min;
     session_end_min = rth_end_min;
@@ -313,4 +313,10 @@ let make_pure_strategy cfg =
     strategy = (module S);
   }
 
-let strategy_pure = make_pure_strategy default_config
+let strategy_pure = pure_strategy default_config
+
+let legacy_strategy cfg =
+  let pure = pure_strategy cfg in
+  Engine.legacy_of_pure ~id:strategy_id ~env:pure.env ?build_setups:pure.build_setups pure.strategy
+
+let strategy = legacy_strategy default_config

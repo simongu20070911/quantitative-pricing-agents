@@ -31,14 +31,14 @@ let strat_registry : strat_pack list =
       specs = Strategies.Strategy_b1b2.parameter_specs;
       build = (fun params ->
           let cfg = Strategies.Strategy_b1b2.config_of_params params in
-          Strategies.Strategy_b1b2.make_pure_strategy cfg);
+          Strategies.Strategy_b1b2.pure_strategy cfg);
     };
     {
       id = Strategies.Vwap_revert_strategy.strategy_id;
       specs = Strategies.Vwap_revert_strategy.parameter_specs;
       build = (fun params ->
           let cfg = Strategies.Vwap_revert_strategy.config_of_params params in
-          Strategies.Vwap_revert_strategy.make_pure_strategy cfg);
+          Strategies.Vwap_revert_strategy.pure_strategy cfg);
     };
   ]
 

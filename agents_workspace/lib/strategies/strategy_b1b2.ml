@@ -3,6 +3,7 @@ open Types
 open Time_utils
 module SC = Strategy_common
 module TT = Trade_transition
+module C = B1b2_constants
 
 module Setup_builder = Setup_builder_b1b2
 module SS = Strategy_sig
@@ -19,8 +20,8 @@ let default_config = {
   session_end_min = rth_end_min;
   qty = 1.0;
   cost = {
-    tick_size = 0.25;
-    tick_value = 12.5;
+    tick_size = C.tick_size;
+    tick_value = C.tick_value;
     slippage_roundtrip_ticks = 1.0;
     fee_per_contract = 4.0;
     equity_base = None;
@@ -29,24 +30,76 @@ let default_config = {
 
 let strategy_id = "b1b2"
 
+type param_field = {
+  name : string;
+  default : float;
+  bounds : float * float;
+  integer : bool;
+  tunable : bool;
+  description : string;
+  set : config -> float -> config;
+}
+
+let param_table : param_field list =
+  let int = true and fl = false in
+  [
+    { name = "session_start_min"; default = Float.of_int default_config.session_start_min;
+      bounds = (0., 1440.); integer = int; tunable = true; description = "session start minute-of-day (ET)";
+      set = (fun cfg v -> { cfg with session_start_min = Int.of_float v |> Int.clamp_exn ~min:0 ~max:1439 }) };
+    { name = "session_end_min"; default = Float.of_int default_config.session_end_min;
+      bounds = (0., 1440.); integer = int; tunable = true; description = "session end minute-of-day (ET)";
+      set = (fun cfg v -> { cfg with session_end_min = Int.of_float v |> Int.clamp_exn ~min:0 ~max:1439 }) };
+    { name = "qty"; default = default_config.qty; bounds = (0.1, 20.); integer = fl; tunable = true;
+      description = "contracts per trade"; set = (fun cfg v -> { cfg with qty = v }) };
+    { name = "cost.slippage_roundtrip_ticks"; default = default_config.cost.slippage_roundtrip_ticks;
+      bounds = (0., 3.); integer = fl; tunable = true; description = "assumed round-trip slippage in ticks";
+      set = (fun cfg v -> { cfg with cost = { cfg.cost with slippage_roundtrip_ticks = v } }) };
+    { name = "cost.fee_per_contract"; default = default_config.cost.fee_per_contract;
+      bounds = (0., 10.); integer = fl; tunable = true; description = "exchange+broker fee per contract";
+      set = (fun cfg v -> { cfg with cost = { cfg.cost with fee_per_contract = v } }) };
+    { name = "cost.equity_base"; default = Option.value default_config.cost.equity_base ~default:0.;
+      bounds = (0., 5_000_000.); integer = fl; tunable = false; description = "account equity in USD for pct PnL; 0 disables";
+      set = (fun cfg v -> { cfg with cost = { cfg.cost with equity_base = if Float.(v <= 0.) then None else Some v } }) };
+    (* Fixed domain constants below, marked tunable=false for now. Flip to true to expose to optimizer. *)
+    { name = "be_trigger_mult"; default = C.be_trigger_mult; bounds = (0.1, 1.0); integer = fl; tunable = false;
+      description = "break-even trigger in R"; set = (fun cfg _ -> cfg) };
+    { name = "downgrade_grace_min"; default = Float.of_int C.downgrade_cutoff_offset_min; bounds = (0., 30.); integer = int; tunable = false;
+      description = "minutes after B2 to allow downgrade"; set = (fun cfg _ -> cfg) };
+    { name = "twoR_range_factor"; default = C.two_r_range_factor; bounds = (0.5, 3.); integer = fl; tunable = false;
+      description = "max B1 range / ABR_prev to allow 2R"; set = (fun cfg _ -> cfg) };
+    { name = "climactic_range_factor"; default = C.climactic_range_factor; bounds = (1.0, 5.0); integer = fl; tunable = false;
+      description = "max B1 range / ABR_prev to be valid"; set = (fun cfg _ -> cfg) };
+    { name = "gap_pct_low"; default = C.gap_min_pct_adr; bounds = (0., 100.); integer = fl; tunable = false;
+      description = "min |gap| %% ADR to qualify"; set = (fun cfg _ -> cfg) };
+    { name = "gap_pct_high"; default = C.gap_max_pct_adr; bounds = (0., 100.); integer = fl; tunable = false;
+      description = "max |gap| %% ADR to qualify"; set = (fun cfg _ -> cfg) };
+    { name = "body_pct_min"; default = C.body_pct_min; bounds = (0., 1.); integer = fl; tunable = false;
+      description = "min body/range for trend"; set = (fun cfg _ -> cfg) };
+    { name = "ibs_bull_min"; default = C.ibs_bull_min; bounds = (0., 1.); integer = fl; tunable = false;
+      description = "IBS threshold bullish"; set = (fun cfg _ -> cfg) };
+    { name = "ibs_bear_max"; default = C.ibs_bear_max; bounds = (0., 1.); integer = fl; tunable = false;
+      description = "IBS threshold bearish"; set = (fun cfg _ -> cfg) };
+  ]
+
 let parameter_specs =
-  SC.Config.session_params ~default_start:default_config.session_start_min
-    ~default_end:default_config.session_end_min
-  @ [
-      Parameters.make ~name:"qty" ~default:1.0 ~bounds:(0.1, 20.)
-        ~description:"contracts per trade" ();
-    ]
-  @ SC.Config.cost_params default_config.cost
+  param_table
+  |> List.filter ~f:(fun p -> p.tunable)
+  |> List.map ~f:(fun p ->
+      Parameters.make ~name:p.name ~default:p.default ~bounds:p.bounds
+        ~integer:p.integer ~description:p.description ())
 
 let config_of_params (m : Parameters.value_map) : config =
-  let session_start_min, session_end_min =
-    SC.Config.session_of_params
-      ~defaults:(default_config.session_start_min, default_config.session_end_min)
-      m
-  in
-  let qty = Map.find m "qty" |> Option.value ~default:default_config.qty in
-  let cost = SC.Config.cost_of_params ~defaults:default_config.cost m in
-  { session_start_min; session_end_min; qty; cost }
+  List.fold param_table ~init:default_config ~f:(fun cfg p ->
+      match Map.find m p.name with
+      | None -> cfg
+      | Some v -> p.set cfg v)
+
+let session_window cfg = cfg.session_start_min, cfg.session_end_min
+let qty cfg = cfg.qty
+let cost cfg = cfg.cost
+let with_cost ~cost cfg = { cfg with cost }
+let with_qty ~qty cfg = { cfg with qty }
+let with_session ~start ~end_ cfg = { cfg with session_start_min = start; session_end_min = end_ }
 
 let record_trade ~(cfg : config) ~(plan : trade_plan) ~(active : active_state)
     ~(exit_ts : timestamp) ~(exit_price : float) ~(reason : exit_reason) =
@@ -147,18 +200,6 @@ module Policy_of_pure (Cfg : sig val cfg : config end) : Policy_sig.S = struct
   let on_session_end st last_bar = PS.finalize_day env st last_bar
 end
 
-let make_strategy cfg =
-  let module P = Policy_of_pure(struct let cfg = cfg end) in
-  {
-    Engine.id = strategy_id;
-    session_start_min = cfg.session_start_min;
-    session_end_min = cfg.session_end_min;
-    build_setups = Some Setup_builder.compute_daily_context_and_setups;
-    policy = (module P);
-  }
-
-let strategy = make_strategy default_config
-
 let make_pure_strategy cfg =
   let env = {
     SS.session_start_min = cfg.session_start_min;
@@ -175,3 +216,11 @@ let make_pure_strategy cfg =
   }
 
 let strategy_pure = make_pure_strategy default_config
+
+let legacy_strategy cfg =
+  let pure = make_pure_strategy cfg in
+  Engine.legacy_of_pure ~id:strategy_id ~env:pure.env ?build_setups:pure.build_setups pure.strategy
+
+let strategy = legacy_strategy default_config
+
+let pure_strategy = make_pure_strategy

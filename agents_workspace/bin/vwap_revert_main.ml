@@ -26,17 +26,18 @@ let plot dir (result : Strategy_fast.Engine.Engine.run_result) =
 
 let main ~slippage ~fees ~s_entry ~z_exit ?plot_dir ?export_trades ?export_daily ?plot_python filename =
   let open Strategy_fast.Strategies.Vwap_revert_strategy in
+  let tuned_cost = { (cost default_config) with
+                     slippage_roundtrip_ticks = slippage;
+                     fee_per_contract = fees; } in
   let cfg =
-    { default_config with
-      s_entry;
-      z_exit;
-      cost = { default_config.cost with
-               slippage_roundtrip_ticks = slippage;
-               fee_per_contract = fees; } }
+    default_config
+    |> with_cost ~cost:tuned_cost
+    |> with_s_entry ~s_entry
+    |> with_z_exit ~z_exit
   in
-  let strat = make_strategy cfg in
+  let strat = pure_strategy cfg in
   let (result : Strategy_fast.Engine.Engine.run_result) =
-    Strategy_fast.Engine.Engine.run strat ~filename
+    Strategy_fast.Engine.Engine.run_pure strat ~filename
   in
   let n_trades = List.length result.trades in
   let n_days = List.length result.daily_pnl in

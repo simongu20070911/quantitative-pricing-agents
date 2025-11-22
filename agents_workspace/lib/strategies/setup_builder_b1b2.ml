@@ -3,6 +3,7 @@ open Types
 open Time_utils
 open Csv_parser
 open Indicators
+module C = B1b2_constants
 
 [@@@warning "-27-32-69"]
 
@@ -11,7 +12,7 @@ let compute_daily_context_and_setups filename : setup Date.Table.t =
   let b1_tbl : bar_5m Date.Table.t = Date.Table.create () in
   let b2_tbl : bar_5m Date.Table.t = Date.Table.create () in
   let eod_abr_tbl : float Date.Table.t = Date.Table.create () in
-  let abr_window = Abr.create ~n:8 in
+  let abr_window = Abr.create ~n:C.abr_window_n in
   let current_5m : bar_5m option ref = ref None in
 
   let flush_5m (b : bar_5m) =
@@ -96,11 +97,11 @@ let compute_daily_context_and_setups filename : setup Date.Table.t =
                let body_pct = body /. range in
                let ibs = (b1.close -. b1.low) /. range in
 
-               let f_gap       = Float.(gap_pct_adr >= 11. && gap_pct_adr <= 60.) in
-               let f_trend     = Float.(body_pct >= 0.5) in
-               let f_climactic = Float.(range <= 2.5 *. abr_prev) in
-               let f_bull      = Float.(b1.close > b1.open_ && ibs > 0.69) in
-               let f_bear      = Float.(b1.close < b1.open_ && ibs < 0.31) in
+               let f_gap       = Float.(gap_pct_adr >= C.gap_min_pct_adr && gap_pct_adr <= C.gap_max_pct_adr) in
+               let f_trend     = Float.(body_pct >= C.body_pct_min) in
+               let f_climactic = Float.(range <= C.climactic_range_factor *. abr_prev) in
+               let f_bull      = Float.(b1.close > b1.open_ && ibs > C.ibs_bull_min) in
+               let f_bear      = Float.(b1.close < b1.open_ && ibs < C.ibs_bear_max) in
 
                let dir_opt =
                  if f_gap && f_trend && f_climactic && f_bull then Some Long

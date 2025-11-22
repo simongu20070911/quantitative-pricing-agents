@@ -1,0 +1,12 @@
+let tick_size = B1b2_constants.tick_size
+let tick_value = B1b2_constants.tick_value
+let be_trigger_mult = B1b2_constants.be_trigger_mult
+let b2_downgrade_grace_min = B1b2_constants.downgrade_cutoff_offset_min
+let twoR_range_cutoff_mult = B1b2_constants.two_r_range_factor
+let abr_range_cap_mult = B1b2_constants.climactic_range_factor
+let gap_pct_low = B1b2_constants.gap_min_pct_adr
+let gap_pct_high = B1b2_constants.gap_max_pct_adr
+let body_pct_min = B1b2_constants.body_pct_min
+let ibs_bull_min = B1b2_constants.ibs_bull_min
+let ibs_bear_max = B1b2_constants.ibs_bear_max
+let entry_slip_ticks = 0. (** retained for compatibility; unused in modern path *)

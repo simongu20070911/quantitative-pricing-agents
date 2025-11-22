@@ -23,3 +23,4 @@ constraints: (these are the core guardrails\principles that you must explicitly 
 
 3: For tests, you can only add tests. you cannot change\edit\delete tests and testing functionality in any way, unless the user tell you so explicitly. 
 
+4: you must build the project before testing

@@ -18,3 +18,9 @@
  (public_name strategy_optimize)
  (libraries core core_unix strategy_fast yojson)
  (preprocess (pps ppx_jane)))
+
+(executable
+ (name list_setup_days)
+ (modules list_setup_days)
+ (libraries core core_unix strategy_fast)
+ (preprocess (pps ppx_jane)))

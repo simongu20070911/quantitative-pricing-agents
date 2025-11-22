@@ -25,9 +25,10 @@ let%test_unit "backtest wrapper matches engine run for b1b2" =
   let cfg = Strategies.Strategy_b1b2.default_config in
   let module TB = Engine.Backtest in
   let open Time_utils in
+  let ss, se = Strategies.Strategy_b1b2.session_window cfg in
   let bt_cfg = {
-    TB.session_start_min = cfg.session_start_min;
-    session_end_min = cfg.session_end_min;
+    TB.session_start_min = ss;
+    session_end_min = se;
     trade_start_min = b2_min;
     trade_end_min = abr_eod_min;
     build_trade_plan = Strategy_fast.Trade_logic.build_trade_plan;

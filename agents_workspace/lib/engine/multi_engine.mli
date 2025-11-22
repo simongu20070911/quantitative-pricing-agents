@@ -12,7 +12,24 @@ type run_result = {
 
 val run_all : Engine.strategy list -> filename:string -> run_result list
 
+module type BAR_STREAM = sig
+  val iter : f:(bar_1m -> unit) -> unit
+end
+
+val run_all_pure : Engine.pure_strategy list -> filename:string -> run_result list
+
+val run_shared_with_stream
+  :  stream:(module BAR_STREAM)
+  -> make_setups:(Engine.strategy -> setup Date.Table.t)
+  -> Engine.strategy list
+  -> run_result list
+
 val run_shared
   :  Engine.strategy list
+  -> filename:string
+  -> run_result list
+
+val run_shared_pure
+  :  Engine.pure_strategy list
   -> filename:string
   -> run_result list

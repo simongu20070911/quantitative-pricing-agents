@@ -27,3 +27,13 @@ type run_result = {
 val run : strategy -> filename:string -> run_result
 
 val run_pure : pure_strategy -> filename:string -> run_result
+
+(** Build a legacy [strategy] wrapper from a pure [Strategy_sig] implementation.
+    This keeps strategy logic single-sourced while interoping with policy-based
+    runners and existing call sites. *)
+val legacy_of_pure
+  :  id:string
+  -> env:Strategy_sig.env
+  -> ?build_setups:(string -> setup Date.Table.t)
+  -> (module Strategy_sig.S)
+  -> strategy

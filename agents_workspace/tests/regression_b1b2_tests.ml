@@ -16,8 +16,8 @@ let find_fixture () =
 
 let%test_unit "b1b2 matches golden baseline on sample_es fixture" =
   let sample_file = find_fixture () in
-  let strat = Strategies.Strategy_b1b2.strategy in
-  let r = Engine.Engine.run strat ~filename:sample_file in
+  let strat = Strategies.Strategy_b1b2.strategy_pure in
+  let r = Engine.Engine.run_pure strat ~filename:sample_file in
   let trades = r.trades in
   let n = List.length trades in
   let total_R = List.fold trades ~init:0.0 ~f:(fun acc t -> acc +. t.pnl_R) in

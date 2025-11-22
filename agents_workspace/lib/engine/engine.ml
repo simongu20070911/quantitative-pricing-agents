@@ -215,3 +215,19 @@ let run_pure (strategy : pure_strategy) ~(filename : string) : run_result =
   { setups = setups_tbl; trades; daily_pnl; daily_pnl_usd; daily_pnl_pct }
 
 let _ = run_pure
+
+let legacy_of_pure ~id ~(env : Strategy_sig.env)
+    ?build_setups (module S : PURE_STRATEGY) : strategy =
+  let module P = struct
+    type t = S.state
+    let init_day = S.init
+    let on_bar st bar = S.step env st bar
+    let on_session_end st last_bar = S.finalize_day env st last_bar
+  end in
+  {
+    id;
+    session_start_min = env.session_start_min;
+    session_end_min = env.session_end_min;
+    build_setups;
+    policy = (module P);
+  }

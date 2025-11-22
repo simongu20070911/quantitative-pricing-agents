@@ -25,7 +25,7 @@ let plot dir (result : Strategy_fast.Engine.Engine.run_result) =
   render_histogram ~outfile:(Filename.concat dir "pnl_hist.png") ~values:pnl ~bins:40
 
 let main ?plot_dir ?export_trades ?export_daily ?plot_python ~cfg filename =
-  let strat = Strategy_fast.Strategies.Strategy_b1b2.make_pure_strategy cfg in
+  let strat = Strategy_fast.Strategies.Strategy_b1b2.pure_strategy cfg in
   let (result : Strategy_fast.Engine.Engine.run_result) =
     Strategy_fast.Engine.Engine.run_pure strat ~filename
   in
@@ -93,17 +93,20 @@ let () =
   match !filename with
   | None -> usage ()
   | Some file ->
-      let base = Strategy_fast.Strategies.Strategy_b1b2.default_config in
-      let cost = {
-        base.cost with
-        fee_per_contract = Option.value !fee ~default:base.cost.fee_per_contract;
-        slippage_roundtrip_ticks = Option.value !slip ~default:base.cost.slippage_roundtrip_ticks;
-        equity_base = (match !equity with None -> base.cost.equity_base | Some x -> if Float.(x <= 0.) then None else Some x);
-      } in
-      let cfg = {
-        base with
-        qty = Option.value !qty ~default:base.qty;
-        cost;
-      } in
+      let module B = Strategy_fast.Strategies.Strategy_b1b2 in
+      let base = B.default_config in
+      let base_cost = B.cost base in
+      let cost =
+        { base_cost with
+          fee_per_contract = Option.value !fee ~default:0.;
+          slippage_roundtrip_ticks = Option.value !slip ~default:0.;
+          equity_base = (match !equity with None -> base_cost.equity_base | Some x -> if Float.(x <= 0.) then None else Some x);
+        }
+      in
+      let cfg =
+        base
+        |> B.with_qty ~qty:(Option.value !qty ~default:(B.qty base))
+        |> B.with_cost ~cost
+      in
       main ~cfg ?plot_dir:!plot_dir ?export_trades:!export_trades
         ?export_daily:!export_daily ?plot_python:!plot_python file
