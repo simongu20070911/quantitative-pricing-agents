@@ -14,7 +14,7 @@ val with_z_exit : z_exit:float -> config -> config
 val with_session : start:int -> end_:int -> config -> config
 val with_qty : qty:float -> config -> config
 
-module Pure (_ : sig val cfg : config end) : Strategy_sig.S
+module Intent (_ : sig val cfg : config end) : Strategy_sig.V2
 
-val pure_strategy : config -> Engine.pure_strategy
-val strategy_pure : Engine.pure_strategy
+val pure_strategy : config -> Engine_v2.pure_strategy
+val strategy_pure : Engine_v2.pure_strategy

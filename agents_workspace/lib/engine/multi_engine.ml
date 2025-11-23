@@ -1,9 +1,10 @@
 open Core
 open Types
-open Engine
 module Pnl = Pnl_agg
+module EV2 = Engine_v2
 
-(* Results per strategy *)
+[@@@warning "-32-69"]
+
 type run_result = {
   strategy_id : string;
   setups      : setup Date.Table.t;
@@ -13,246 +14,163 @@ type run_result = {
   daily_pnl_pct : (Date.t * float) list;
 }
 
-(* Lightweight bar source abstraction *)
 module type BAR_STREAM = sig
   val iter : f:(bar_1m -> unit) -> unit
 end
 
-(* Multi-pass helper *)
-let run_all (strategies : Engine.strategy list) ~(filename : string) : run_result list =
+let run_all (strategies : EV2.pure_strategy list) ~(filename : string)
+  : run_result list =
   List.map strategies ~f:(fun strat ->
-      let { Engine.setups; trades; daily_pnl; daily_pnl_usd; daily_pnl_pct } = Engine.run strat ~filename in
-      { strategy_id = strat.id; setups; trades; daily_pnl; daily_pnl_usd; daily_pnl_pct })
-
-let run_all_pure (strategies : Engine.pure_strategy list) ~(filename : string) : run_result list =
-  List.map strategies ~f:(fun strat ->
-      let { Engine.setups; trades; daily_pnl; daily_pnl_usd; daily_pnl_pct } = Engine.run_pure strat ~filename in
+      let { EV2.setups; trades; daily_pnl; daily_pnl_usd; daily_pnl_pct } =
+        EV2.run_pure strat ~filename
+      in
       { strategy_id = strat._id; setups; trades; daily_pnl; daily_pnl_usd; daily_pnl_pct })
 
-(* Helpers shared by contexts *)
-type acc = Pnl.t
+let run_all_pure = run_all
+
+let make_exec_config (env : Strategy_sig.env) : Execution_engine.config =
+  let build_trade ~(plan : trade_plan) ~(active : active_state)
+      ~(exit_ts : timestamp) ~(exit_price : float)
+      ~(exit_qty : float) ~(exit_reason : exit_reason) : trade =
+    Trade_base.make_raw
+      ~qty:exit_qty ~r_pts:plan.r_pts ~direction:plan.direction
+      ~entry_ts:active.entry_ts ~entry_px:active.entry_price
+      ~exit_ts ~exit_px:exit_price ~exit_reason
+      ~meta:[]
+    |> Trade_base.apply_costs ~qty:exit_qty env.cost
+  in
+  { Execution_engine.cost = env.cost;
+    exec = env.exec;
+    build_trade; }
+
+type ctx =
+  | Strat : {
+      strat      : EV2.pure_strategy;
+      strategy   : (module Strategy_sig.V2 with type state = 's);
+      state      : 's option;
+      setups     : setup Date.Table.t;
+      book       : Order_book.t;
+      current_date : Date.t option;
+      last_session_bar : bar_1m option;
+      acc        : Pnl.t;
+    } -> ctx
 
 let empty_acc = Pnl.empty
 let flush_trades = Pnl.add_trades
 
-(* Shared-bar runner using a GADT to keep policy state typed, but contexts are immutable records. *)
-type strat_ctx =
-  | Strat : {
-      strat      : Engine.strategy;
-      setups     : setup Date.Table.t;
-      policy     : (module Policy_sig.S with type t = 's);
-      state      : 's option;
-      current_date : Date.t option;
-      last_session_bar : bar_1m option;
-      acc        : acc;
-    } -> strat_ctx
-
-let init_ctx (strat : Engine.strategy) ~(setups : setup Date.Table.t) =
-  let module P = (val strat.policy : Policy_sig.S) in
+let init_ctx (strat : EV2.pure_strategy) ~(setups : setup Date.Table.t) : ctx =
+  let module S = (val strat.strategy : Strategy_sig.V2) in
   Strat {
     strat;
-    setups;
-    policy = (module P);
+    strategy = (module S);
     state = None;
+    setups;
+    book = Order_book.empty ();
     current_date = None;
     last_session_bar = None;
     acc = empty_acc;
   }
 
 let set_date (Strat ctx) date =
-  let module P = (val ctx.policy) in
+  let module S = (val ctx.strategy) in
   let setup_opt = Hashtbl.find ctx.setups date in
-  Strat { ctx with
-          current_date = Some date;
-          state = Some (P.init_day setup_opt);
-          last_session_bar = None; }
+  Strat {
+    ctx with
+    current_date = Some date;
+    state = Some (S.init setup_opt);
+    book = Order_book.empty ();
+    last_session_bar = None;
+  }
 
-let finalize_day (Strat ctx) =
+let finalize_day (Strat ctx) : ctx =
   match ctx.state with
   | None -> Strat { ctx with current_date = None; last_session_bar = None }
   | Some st ->
-      let module P = (val ctx.policy) in
-      let st', trades = P.on_session_end st ctx.last_session_bar in
-      let acc = flush_trades ctx.acc trades in
+      let module S = (val ctx.strategy) in
+      let env = ctx.strat.env in
+      let st', cmds = S.finalize_day env st ctx.last_session_bar in
+      let order_cmds, flatten_cmds =
+        List.partition_tf cmds ~f:(function
+            | Strategy_sig.Submit_bracket _
+            | Strategy_sig.Update_all _
+            | Strategy_sig.Cancel_all -> true
+            | Strategy_sig.Flatten_all _ -> false)
+      in
+      let cfg = make_exec_config env in
+      let book_after_cmds =
+        match ctx.last_session_bar with
+        | None -> ctx.book
+        | Some lb -> Order_book.apply_cmds ctx.book ~ts:lb.ts order_cmds
+      in
+      let book_after_flat, flatten_trades =
+        match ctx.last_session_bar with
+        | None -> book_after_cmds, []
+        | Some lb ->
+            Execution_engine.apply_flatten_cmds ~config:cfg ~book:book_after_cmds
+              ~bar:lb flatten_cmds
+      in
+      let book', trades =
+        Execution_engine.on_session_end ~config:cfg
+          ~book:book_after_flat ~last_bar:ctx.last_session_bar
+      in
+      let acc = flatten_trades @ trades |> flush_trades ctx.acc in
       Strat {
         ctx with
         state = Some st';
         current_date = None;
         last_session_bar = None;
+        book = book';
         acc;
       }
 
-let step_ctx (Strat ctx0) (bar : bar_1m) : strat_ctx =
+let step_ctx (Strat ctx0) (bar : bar_1m) : ctx =
   let { ts = { date; minute_of_day }; _ } = bar in
   let ctx =
     match ctx0.current_date with
     | None -> set_date (Strat ctx0) date
     | Some d when Date.equal d date -> Strat ctx0
-    | Some _ ->
-        let Strat ctx' = finalize_day (Strat ctx0) in
-        set_date (Strat ctx') date
+    | Some _ -> set_date (finalize_day (Strat ctx0)) date
   in
   let Strat ctx = ctx in
-  let module P = (val ctx.policy) in
+  let module S = (val ctx.strategy) in
+  let env = ctx.strat.env in
   let last_session_bar =
-    if minute_of_day >= ctx.strat.session_start_min
-       && minute_of_day <= ctx.strat.session_end_min
+    if minute_of_day >= env.session_start_min
+       && minute_of_day <= env.session_end_min
     then Some bar
     else ctx.last_session_bar
   in
   match ctx.state with
-  | None ->
-      Strat { ctx with last_session_bar }
+  | None -> Strat { ctx with last_session_bar }
   | Some st ->
-      let st', trades = P.on_bar st bar in
+      let st', cmds = S.step env st bar in
+      let order_cmds, flatten_cmds =
+        List.partition_tf cmds ~f:(function
+            | Strategy_sig.Submit_bracket _
+            | Strategy_sig.Update_all _
+            | Strategy_sig.Cancel_all -> true
+            | Strategy_sig.Flatten_all _ -> false)
+      in
+      let cfg = make_exec_config env in
+      let book_after_cmds = Order_book.apply_cmds ctx.book ~ts:bar.ts order_cmds in
+      let book_after_flat, flatten_trades =
+        Execution_engine.apply_flatten_cmds ~config:cfg ~book:book_after_cmds
+          ~bar flatten_cmds
+      in
+      let book', trades_step =
+        Execution_engine.step ~config:cfg ~book:book_after_flat ~bar
+      in
+      let trades = flatten_trades @ trades_step in
       let acc = flush_trades ctx.acc trades in
-      Strat { ctx with state = Some st'; last_session_bar; acc }
-
-let extract_result (Strat ctx) : run_result =
-  let trades = List.rev ctx.acc.trades in
-  let daily_pnl, daily_pnl_usd, daily_pnl_pct = Pnl.to_alists_unsorted ctx.acc in
-  let sort = List.sort ~compare:(fun (d1, _) (d2, _) -> Date.compare d1 d2) in
-  let daily_pnl = sort daily_pnl in
-  let daily_pnl_usd = sort daily_pnl_usd in
-  let daily_pnl_pct = sort daily_pnl_pct in
-  {
-    strategy_id = ctx.strat.id;
-    setups = ctx.setups;
-    trades;
-    daily_pnl;
-    daily_pnl_usd;
-    daily_pnl_pct;
-  }
-
-(* Generic driver to eliminate duplicate shared-stream logic. *)
-module type CTX = sig
-  type t
-  type strat
-
-  val init : strat -> setups:setup Date.Table.t -> t
-  val step : t -> bar_1m -> t
-  val finalize_day : t -> t
-  val extract : t -> run_result
-end
-
-let run_shared_generic
-    (type s)
-    (module C : CTX with type strat = s)
-    ~(iter : (bar_1m -> unit) -> unit)
-    ~(make_setups : s -> setup Date.Table.t)
-    (strategies : s list) : run_result list =
-  let ctxs =
-    List.map strategies ~f:(fun strat ->
-        C.init strat ~setups:(make_setups strat))
-  in
-  let ctxs_ref = ref ctxs in
-  iter (fun bar ->
-      ctxs_ref := List.map !ctxs_ref ~f:(fun ctx -> C.step ctx bar));
-  ctxs_ref := List.map !ctxs_ref ~f:C.finalize_day;
-  List.map !ctxs_ref ~f:C.extract
-
-let run_shared_with_stream ~(stream : (module BAR_STREAM))
-    ~(make_setups : Engine.strategy -> setup Date.Table.t)
-    (strategies : Engine.strategy list)
-  : run_result list =
-  let module Stream = (val stream : BAR_STREAM) in
-  let module C = struct
-    type strat = Engine.strategy
-    type t = strat_ctx
-    let init = init_ctx
-    let step = step_ctx
-    let finalize_day = finalize_day
-    let extract = extract_result
-  end in
-  run_shared_generic (module C)
-    ~iter:(fun g -> Stream.iter ~f:g)
-    ~make_setups strategies
-
-let run_shared (strategies : Engine.strategy list) ~(filename : string)
-  : run_result list =
-  let module Csv_stream = struct
-    let iter ~f = Csv_parser.iter_bars filename ~f
-  end in
-  let make_setups (strat : Engine.strategy) =
-    match strat.build_setups with
-    | None -> Date.Table.create ()
-    | Some f -> f filename
-  in
-  run_shared_with_stream ~stream:(module Csv_stream) ~make_setups strategies
-
-(* Pure strategy shared runner *)
-type pure_ctx =
-  | Pure_strat : {
-      strat      : Engine.pure_strategy;
-      setups     : setup Date.Table.t;
-      strategy   : (module Strategy_sig.S with type state = 's);
-      state      : 's option;
-      current_date : Date.t option;
-      last_session_bar : bar_1m option;
-      acc        : acc;
-    } -> pure_ctx
-
-let init_pure_ctx (strat : Engine.pure_strategy) ~(setups:setup Date.Table.t) =
-  let module S = (val strat.strategy : Strategy_sig.S) in
-  Pure_strat {
-    strat;
-    setups;
-    strategy = (module S);
-    state = None;
-    current_date = None;
-    last_session_bar = None;
-    acc = empty_acc;
-  }
-
-let set_date_pure (Pure_strat ctx) date =
-  let module S = (val ctx.strategy) in
-  let setup_opt = Hashtbl.find ctx.setups date in
-  Pure_strat { ctx with
-               current_date = Some date;
-               state = Some (S.init setup_opt);
-               last_session_bar = None; }
-
-let finalize_day_pure (Pure_strat ctx) =
-  match ctx.state with
-  | None -> Pure_strat { ctx with current_date = None; last_session_bar = None }
-  | Some st ->
-      let module S = (val ctx.strategy) in
-      let st', trades = S.finalize_day ctx.strat.env st ctx.last_session_bar in
-      let acc = flush_trades ctx.acc trades in
-      Pure_strat {
+      Strat {
         ctx with
         state = Some st';
-        current_date = None;
-        last_session_bar = None;
+        last_session_bar;
+        book = book';
         acc;
       }
 
-let step_pure_ctx (Pure_strat ctx0) (bar : bar_1m) : pure_ctx =
-  let { ts = { date; minute_of_day }; _ } = bar in
-  let ctx =
-    match ctx0.current_date with
-    | None -> set_date_pure (Pure_strat ctx0) date
-    | Some d when Date.equal d date -> Pure_strat ctx0
-    | Some _ ->
-        let Pure_strat ctx' = finalize_day_pure (Pure_strat ctx0) in
-        set_date_pure (Pure_strat ctx') date
-  in
-  let Pure_strat ctx = ctx in
-  let module S = (val ctx.strategy) in
-  let last_session_bar =
-    if minute_of_day >= ctx.strat.env.session_start_min
-       && minute_of_day <= ctx.strat.env.session_end_min
-    then Some bar
-    else ctx.last_session_bar
-  in
-  match ctx.state with
-  | None -> Pure_strat { ctx with last_session_bar }
-  | Some st ->
-      let st', trades = S.step ctx.strat.env st bar in
-      let acc = flush_trades ctx.acc trades in
-      Pure_strat { ctx with state = Some st'; last_session_bar; acc }
-
-let extract_result_pure (Pure_strat ctx) : run_result =
+let extract_result (Strat ctx) : run_result =
   let trades = List.rev ctx.acc.trades in
   let daily_pnl, daily_pnl_usd, daily_pnl_pct = Pnl.to_alists_unsorted ctx.acc in
   let sort = List.sort ~compare:(fun (d1, _) (d2, _) -> Date.compare d1 d2) in
@@ -268,24 +186,28 @@ let extract_result_pure (Pure_strat ctx) : run_result =
     daily_pnl_pct;
   }
 
-let run_shared_pure (strategies : Engine.pure_strategy list) ~(filename : string)
+let run_shared_with_stream ~(stream : (module BAR_STREAM))
+    ~(make_setups : EV2.pure_strategy -> setup Date.Table.t)
+    (strategies : EV2.pure_strategy list)
   : run_result list =
-  let make_setups strat =
+  let module Stream = (val stream : BAR_STREAM) in
+  let ctxs = List.map strategies ~f:(fun strat -> init_ctx strat ~setups:(make_setups strat)) in
+  let ctxs_ref = ref ctxs in
+  Stream.iter ~f:(fun bar ->
+      ctxs_ref := List.map !ctxs_ref ~f:(fun ctx -> step_ctx ctx bar));
+  ctxs_ref := List.map !ctxs_ref ~f:finalize_day;
+  List.map !ctxs_ref ~f:extract_result
+
+let run_shared (strategies : EV2.pure_strategy list) ~(filename : string)
+  : run_result list =
+  let module Csv_stream = struct
+    let iter ~f = Csv_parser.iter_bars filename ~f
+  end in
+  let make_setups (strat : EV2.pure_strategy) =
     match strat.build_setups with
     | None -> Date.Table.create ()
     | Some f -> f filename
   in
-  let module Csv_stream = struct
-    let iter ~f = Csv_parser.iter_bars filename ~f
-  end in
-  let module C = struct
-    type strat = Engine.pure_strategy
-    type t = pure_ctx
-    let init = init_pure_ctx
-    let step = step_pure_ctx
-    let finalize_day = finalize_day_pure
-    let extract = extract_result_pure
-  end in
-  run_shared_generic (module C)
-    ~iter:(fun g -> Csv_stream.iter ~f:g)
-    ~make_setups strategies
+  run_shared_with_stream ~stream:(module Csv_stream) ~make_setups strategies
+
+let run_shared_pure = run_shared

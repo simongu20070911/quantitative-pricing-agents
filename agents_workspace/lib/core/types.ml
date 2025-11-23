@@ -105,14 +105,59 @@ type active_state = {
   mutable moved_to_be : bool;
   entry_ts           : timestamp;
   mutable entry_price : float;
+  mutable entry_value : float;
   mutable qty : float;
+  mutable pending_entry_qty : float;       (** additional qty still trying to fill *)
+  mutable pending_entry_cancel_after : int; (** bars left to keep pending entry; -1 => no timeout *)
+}
+
+type pending_state = {
+  qty_remaining : float;
+  cancel_after  : int;   (** bars left before cancel; -1 => never cancel *)
+  latency_remaining : int; (** bars of latency before entry eligible; 0 => live now *)
 }
 
 type trade_state =
   | No_trade
-  | Pending
+  | Pending of pending_state
   | Active of active_state
   | Done
+
+(* Order/position layer for more complex engines *)
+
+type order_side =
+  | Buy
+  | Sell
+
+type order_status =
+  | Working
+  | Filled
+  | Cancelled
+
+type order_kind =
+  | Bracket of trade_plan
+
+type order = {
+  id : int;
+  parent_id : int option;
+  side : order_side;
+  qty : float;
+  kind : order_kind;
+  trade_state : trade_state;
+  created_ts : timestamp;
+  updated_ts : timestamp;
+  status : order_status;
+  meta : (string * string) list;
+}
+
+type book_position = {
+  id : int;
+  direction : direction;
+  qty : float;
+  entry_ts : timestamp;
+  entry_price : float;
+  meta : (string * string) list;
+}
 
 (* Aggregate performance outputs for reuse (printers can format as needed) *)
 type perf_stats = {

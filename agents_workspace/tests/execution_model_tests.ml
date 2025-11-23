@@ -73,7 +73,7 @@ let%test_unit "gap through stop exits at gap open" =
   assert (Poly.(t.exit_reason = Stop))
 
 let%test_unit "latency one bar delays entry" =
-  let exec = Execution_params.default ~tick_size:0.25 in
+  let exec = { (Execution_params.default ~tick_size:0.25) with latency_bars = 1 } in
   let plan = base_plan ~direction:Long in
   let pending = TT.init_pending ~qty:1.0 ~latency_bars:exec.latency_bars ~cancel_after:exec.cancel_latency_bars in
   let bar1 = mk_bar ~minute:1 ~open_:100.1 ~high:100.2 ~low:99.9 ~close:100.15 ~volume:5. in

@@ -26,7 +26,7 @@ constraints: (these are the core guardrails\principles that you must explicitly 
 
 4: when you finish a feature, you must run build before running tests. doing this will build: cd /Users/simongu/Documents/Library_QPA/QPA/agents_workspace && eval "$(opam env --switch=5.4.0 --set-switch)" && dune build
 
-5: when there's unused values that make the build fail, you traverse down deeply of that usage of that value, and if its okay, trim it down. the goal is to keep the repo clean. 
+5: when there's unused things that make the build fail, you traverse down deeply of that usage of that thing, and if its okay, trim it down. the goal is to keep the repo clean. no using suppression of warning
 
 principles to keep in mind when coding: 
 Safe from bugs, easy to understand, ready for change. 

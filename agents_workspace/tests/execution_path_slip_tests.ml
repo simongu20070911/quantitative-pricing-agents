@@ -26,10 +26,17 @@ let base_plan ~direction =
     b2_follow = Types.Follow_good; }
 
 let active_state ~stop_price ~entry_price ~qty =
-  { stop_price; moved_to_be = false; entry_ts = ts 1; entry_price; qty }
+  { stop_price;
+    moved_to_be = false;
+    entry_ts = ts 1;
+    entry_price;
+    entry_value = entry_price *. qty;
+    qty;
+    pending_entry_qty = 0.;
+    pending_entry_cancel_after = 0; }
 
-let record_exit_reason ~active:_ ~exit_ts:_ ~exit_price:_ ~exit_reason = exit_reason
-let record_exit_price ~active:_ ~exit_ts:_ ~exit_price ~exit_reason:_ = exit_price
+let record_exit_reason ~active:_ ~exit_ts:_ ~exit_price:_ ~exit_qty:_ ~exit_reason = exit_reason
+let record_exit_price ~active:_ ~exit_ts:_ ~exit_price ~exit_qty:_ ~exit_reason:_ = exit_price
 
 let exec_path_order =
   { (EP.default ~tick_size:0.25) with
@@ -53,7 +60,7 @@ let%test_unit "path-order exits target when target touched before stop" =
   let plan = base_plan ~direction:Long in
   let active = active_state ~stop_price:plan.stop_init ~entry_price:plan.entry_price ~qty:1.0 in
   let state, trades =
-    TT.step_with_exec ~exec:exec_path_order ~qty:1.0 ~plan ~state:(Active active)
+    TT.step_with_exec ~exec:exec_path_order ~plan ~state:(Active active)
       ~bar:bar_up_hits_target_then_stop ~record_trade:record_exit_reason
   in
   assert (match state with Done -> true | _ -> false);
@@ -64,7 +71,7 @@ let%test_unit "stop-first exits stop even if target touched earlier" =
   let plan = base_plan ~direction:Long in
   let active = active_state ~stop_price:plan.stop_init ~entry_price:plan.entry_price ~qty:1.0 in
   let _, trades =
-    TT.step_with_exec ~exec:exec_stop_first ~qty:1.0 ~plan ~state:(Active active)
+    TT.step_with_exec ~exec:exec_stop_first ~plan ~state:(Active active)
       ~bar:bar_up_hits_target_then_stop ~record_trade:record_exit_reason
   in
   let exit_reason = List.hd_exn trades in
@@ -81,7 +88,7 @@ let%test_unit "slippage model adjusts exit price (constant ticks on sell)" =
       rng_state = EM.make_rng ~seed:11 (); }
   in
   let _, trades =
-    TT.step_with_exec ~exec ~qty:1.0 ~plan ~state:(Active active)
+    TT.step_with_exec ~exec ~plan ~state:(Active active)
       ~bar:{ bar_up_hits_target_then_stop with high = touch_price; low = touch_price; close = touch_price }
       ~record_trade:record_exit_price
   in
@@ -122,7 +129,7 @@ let%test_unit "down-bar path uses O-L-H-C order for exit resolution" =
       break_even_intrabar = false; }
   in
   let _, trades =
-    TT.step_with_exec ~exec ~qty:1.0 ~plan ~state:(Active active)
+    TT.step_with_exec ~exec ~plan ~state:(Active active)
       ~bar ~record_trade:record_exit_reason
   in
   let exit_reason = List.hd_exn trades in
@@ -130,7 +137,7 @@ let%test_unit "down-bar path uses O-L-H-C order for exit resolution" =
   (* If stop-first, would stop even though target touched earlier. *)
   let exec_stop = { exec with exit_priority = EP.Stop_first } in
   let _, trades_stop =
-    TT.step_with_exec ~exec:exec_stop ~qty:1.0
+    TT.step_with_exec ~exec:exec_stop
       ~plan ~state:(Active { active with stop_price = 101.; moved_to_be = false })
       ~bar ~record_trade:record_exit_reason
   in
@@ -149,7 +156,7 @@ let%test_unit "entry slippage and spread apply on buys" =
     { ts = ts 1; open_ = 100.; high = 101.; low = 99.5; close = 100.4; volume = 4. }
   in
   let state, trades =
-    TT.step_with_exec ~exec ~qty:1.0 ~plan ~state:Pending ~bar
+    TT.step_with_exec ~exec ~plan ~state:(TT.init_pending ~qty:1.0 ~latency_bars:0 ~cancel_after:(-1)) ~bar
       ~record_trade:record_exit_reason
   in
   assert (List.is_empty trades);
@@ -173,7 +180,7 @@ let%test_unit "exit spread worsens buy-to-cover on short target" =
     { ts = ts 2; open_ = 100.; high = 100.; low = touch; close = touch; volume = 4. }
   in
   let _, trades =
-    TT.step_with_exec ~exec ~qty:1.0 ~plan ~state:(Active active)
+    TT.step_with_exec ~exec ~plan ~state:(Active active)
       ~bar ~record_trade:record_exit_price
   in
   let exit_px = List.hd_exn trades in
@@ -189,13 +196,13 @@ let%test_unit "break-even intrabar can flip to stop within same bar" =
   let exec_be = { exec_path_order with break_even_intrabar = true } in
   let exec_close = { exec_path_order with break_even_intrabar = false } in
   let _, trades_be =
-    TT.step_with_exec ~exec:exec_be ~qty:1.0 ~plan ~state:(Active active_be)
+    TT.step_with_exec ~exec:exec_be ~plan ~state:(Active active_be)
       ~bar ~record_trade:record_exit_reason
   in
   assert (not (List.is_empty trades_be));
   assert (Poly.(List.hd_exn trades_be = Types.Stop));
   let _, trades_close =
-    TT.step_with_exec ~exec:exec_close ~qty:1.0 ~plan ~state:(Active active_close)
+    TT.step_with_exec ~exec:exec_close ~plan ~state:(Active active_close)
       ~bar ~record_trade:record_exit_reason
   in
   assert (List.is_empty trades_close)

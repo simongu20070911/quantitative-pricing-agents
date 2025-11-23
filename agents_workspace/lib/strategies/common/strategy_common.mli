@@ -110,8 +110,8 @@ module Strategy_builder : sig
     :  id:string
     -> env:Strategy_sig.env
     -> ?build_setups:(string -> setup Core.Date.Table.t)
-    -> (module Strategy_sig.S)
-    -> Engine.pure_strategy
+    -> (module Strategy_sig.V2)
+    -> Engine_v2.pure_strategy
 end
 
 module Trade_common : sig

@@ -107,10 +107,8 @@ let run_job ~job_file =
   let evaluate params =
     let p = Map.fold overrides ~init:params ~f:(fun ~key ~data acc -> Map.set acc ~key ~data) in
     let strategy = strat_pack.build p in
-    let { Engine.Engine.setups = _; trades; daily_pnl; daily_pnl_usd = _; daily_pnl_pct = _ } =
-      Engine.Engine.run_pure strategy ~filename:datafile
-    in
-    { Opt.params = p; score = 0.; trades; daily_pnl }
+    let res = Engine.Engine.run_pure strategy ~filename:datafile in
+    { Opt.params = p; score = 0.; trades = res.trades; daily_pnl = res.daily_pnl }
   in
   let result = Opt.run job ~evaluate in
   let ts =

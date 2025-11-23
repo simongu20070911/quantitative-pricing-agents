@@ -3,7 +3,7 @@ open Core
 type pack = {
   id : string;
   specs : Parameters.t list;
-  build : Parameters.value_map -> Engine.pure_strategy;
+  build : Parameters.value_map -> Engine_v2.pure_strategy;
 }
 
 let registry : pack list =

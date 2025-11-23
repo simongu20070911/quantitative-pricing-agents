@@ -71,7 +71,7 @@ let exec_deterministic ?(be_intrabar=true) ?(volume_aware=true) () =
 let%test_unit "BE off defers arm until close" =
   let plan = base_plan ~direction:Long in
   let exec = exec_deterministic ~be_intrabar:false () in
-  let pending = TT.init_pending ~qty:1.0 ~cancel_after:(-1) in
+  let pending = TT.init_pending ~qty:1.0 ~latency_bars:exec.latency_bars ~cancel_after:(-1) in
   let bar_entry = mk_bar ~open_:100.1 ~high:100.6 ~low:99.9 ~close:100.5 ~volume:4. ~minute:1 in
   let state1, _ = TT.step ~exec ~plan ~state:pending ~bar:bar_entry ~record_trade:(make_trade ~plan) in
   let bar = mk_bar ~open_:100.6 ~high:101.2 ~low:100.0 ~close:101.1 ~volume:4. ~minute:2 in
@@ -115,7 +115,7 @@ let%test_unit "probabilistic slip deterministic with seed" =
 let%test_unit "cancel-before-fill is ignored (no latency model)" =
   let plan = base_plan ~direction:Long in
   let exec = { (exec_deterministic ()) with allow_same_bar_entry = false } in
-  let pending = TT.init_pending ~qty:1.0 ~cancel_after:(-1) in
+  let pending = TT.init_pending ~qty:1.0 ~latency_bars:exec.latency_bars ~cancel_after:(-1) in
   let bar1 = mk_bar ~open_:100.0 ~high:100.1 ~low:98.5 ~close:98.8 ~volume:4. ~minute:1 in
   let state1, trades1 = TT.step ~exec ~plan ~state:pending ~bar:bar1 ~record_trade:(make_trade ~plan) in
   assert (List.length trades1 = 1);
@@ -161,7 +161,7 @@ let%test_unit "entry/exit competition shares slice with partials off" =
 let%test_unit "PnL uses weighted avg when entry fills at two prices and partial stop" =
   let plan = base_plan ~direction:Long in
   let exec = { (exec_deterministic ()) with allow_partial_fills = true; volume_aware = true } in
-  let pending = TT.init_pending ~qty:2.0 ~cancel_after:0 in
+  let pending = TT.init_pending ~qty:2.0 ~latency_bars:exec.latency_bars ~cancel_after:0 in
   let bar1 = mk_bar ~open_:100.0 ~high:100.2 ~low:99.8 ~close:100.2 ~volume:2.0 ~minute:1 in
   let state1, _ = TT.step ~exec ~plan ~state:pending ~bar:bar1 ~record_trade:(make_trade ~plan) in
   let bar2 = mk_bar ~open_:100.4 ~high:100.6 ~low:100.0 ~close:100.5 ~volume:2.0 ~minute:2 in

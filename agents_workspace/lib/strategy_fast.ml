@@ -6,6 +6,11 @@ module Csv_parser = Csv_parser
 module Summary = Summary
 module Parameters = Parameters
 module Guardrails = Guardrails
+module Execution_params = Execution_params
+module Execution_model = Execution_model
+module Order_book = Order_book
+module Execution_engine = Execution_engine
+module Engine_v2 = Engine_v2
 
 module Features = struct
   module Indicators = Indicators
@@ -18,7 +23,7 @@ module Core = struct
 end
 
 module Engine = struct
-  module Engine = Engine
+  module Engine = Engine_v2
   module Strategy_sig = Strategy_sig
   module Multi_engine = Multi_engine
   module Policy_sig = Policy_sig

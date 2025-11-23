@@ -81,8 +81,9 @@ module Setups = struct
 end
 
 module Strategy_builder = struct
-  let make_pure ~id ~env ?build_setups (module S : Strategy_sig.S) : Engine.pure_strategy =
-    { Engine._id = id; env; build_setups; strategy = (module S) }
+  let make_pure ~id ~env ?build_setups (module S : Strategy_sig.V2)
+      : Engine_v2.pure_strategy =
+    { Engine_v2._id = id; env; build_setups; strategy = (module S) }
 end
 
 module Trade_common = struct

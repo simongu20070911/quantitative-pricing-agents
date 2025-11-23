@@ -17,6 +17,25 @@ let path_prices (bar : bar_1m) : float array =
   else
     [| bar.open_; bar.low; bar.high; bar.close |]
 
+let volume_slices ~(params : Params.t) (bar : bar_1m) : float array =
+  let path = path_prices bar in
+  match params.volume_model with
+  | Params.Equal_quarters ->
+      Array.create ~len:(Array.length path) (bar.volume /. 4.)
+  | Params.Range_weighted ->
+      let weights =
+        Array.init (Array.length path) ~f:(fun i ->
+            match i with
+            | 0 -> Float.abs (path.(1) -. path.(0))
+            | 1 -> Float.abs (path.(2) -. path.(1))
+            | 2 -> Float.abs (path.(3) -. path.(2))
+            | _ -> Float.abs (path.(3) -. path.(2)))
+      in
+      let total = Array.fold ~init:0.0 ~f:( +. ) weights in
+      if Float.(total <= 0.) then Array.create ~len:(Array.length path) (bar.volume /. 4.)
+      else
+        Array.map weights ~f:(fun w -> bar.volume *. (w /. total))
+
 let adjust_price ~(params : Params.t) ~side ~rng price =
   let half_spread = Params.apply_tick params (params.spread_ticks /. 2.) in
   let slip_ticks =

@@ -19,5 +19,5 @@ val with_session : start:int -> end_:int -> config -> config
 val with_exec : exec:Execution_params.t -> config -> config
 val params : config -> B1b2_params.t
 
-val pure_strategy : config -> Engine.pure_strategy
-val strategy_pure : Engine.pure_strategy
+val pure_strategy : config -> Engine_v2.pure_strategy
+val strategy_pure : Engine_v2.pure_strategy

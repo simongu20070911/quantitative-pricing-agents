@@ -159,7 +159,7 @@ let print_stats stats =
 let lookup_meta key meta =
   List.find_map meta ~f:(fun (k,v) -> if String.(k = key) then Some v else None)
 
-let print_sample_trades trades n =
+let print_sample_trades (trades : trade list) n =
   List.iter (List.take trades n) ~f:(fun t ->
       let b2 = Option.value (lookup_meta "b2_follow" t.meta) ~default:"" in
       printf "%s %s entry=%.2f exit=%.2f R=%.2f reason=%s %s\n"
@@ -173,7 +173,7 @@ let minute_to_hhmm m =
   let h = m / 60 and mn = m mod 60 in
   Printf.sprintf "%02d:%02d" h mn
 
-let export_trades_csv ~outfile ~trades =
+let export_trades_csv ~outfile ~(trades : trade list) =
   Out_channel.with_file outfile ~f:(fun oc ->
       Out_channel.output_string oc
         "date,entry_time,exit_time,direction,entry_price,exit_price,qty,r_pts,pnl_pts,pnl_R,pnl_usd,pnl_pct,duration_min,exit_reason,meta\n";

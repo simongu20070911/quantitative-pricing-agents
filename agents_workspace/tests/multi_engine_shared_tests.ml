@@ -47,55 +47,64 @@ let%test_unit "run_shared matches run_all for b1b2 + vwap on sample_es" =
       assert (Float.(abs (ua -. ub) < tol)))
 
 (* Determinism on synthetic in-memory stream exercising run_shared_with_stream. *)
-module Dummy_policy : Strategy_fast.Engine.Policy_sig.S = struct
-  type t = { count : int }
+module Dummy_intent : Strategy_fast.Engine.Strategy_sig.V2 = struct
+  type state = bool (* entered? *)
 
-  let init_day _setup_opt = { count = 0 }
+  let init _setup_opt = false
 
-  let on_bar st (bar : Types.bar_1m) =
-    let _ = bar in
-    let count = st.count + 1 in
-    ({ count }, [])
+  let step (env : Strategy_fast.Engine.Strategy_sig.env) entered (bar : Types.bar_1m) =
+    if entered then entered, []
+    else
+      let plan =
+        let stop = bar.close -. env.cost.tick_size in
+        let target = bar.close +. env.cost.tick_size in
+        {
+          direction = Types.Long;
+          entry_price = bar.close;
+          cancel_level = bar.close -. (2. *. env.cost.tick_size);
+          stop_init = stop;
+          r_pts = env.cost.tick_size;
+          target_mult = 1.0;
+          target_price = target;
+          be_trigger = target;
+          b2_end_minute = env.session_end_min;
+          downgrade_after_b2 = false;
+          abr_prev = 0.0;
+          b1_range = env.cost.tick_size;
+          b2_follow = Types.Follow_good;
+        }
+      in
+      let cmds = [ Strategy_fast.Engine.Strategy_sig.Submit_bracket { plan; qty = env.qty; meta = [ ("strategy", "dummy_v2") ] } ] in
+      true, cmds
 
-  let on_session_end st last_bar =
-    match last_bar with
-    | None -> st, []
-    | Some (lb : Types.bar_1m) ->
-        let trade : Types.trade =
-          {
-            date = lb.ts.date;
-            direction = Types.Long;
-            entry_ts = lb.ts;
-            exit_ts = lb.ts;
-            entry_price = lb.close;
-            exit_price = lb.close;
-            qty = 1.0;
-            r_pts = 1.0;
-            pnl_pts = 0.0;
-            pnl_R = Float.of_int st.count; (* encodes bar count, proves last_bar passed *)
-            pnl_usd = 0.0;
-            pnl_pct = None;
-            duration_min = 0.0;
-            exit_reason = Types.Eod_flat;
-            meta = [];
-          }
-        in
-        (st, [ trade ])
+  let finalize_day _env entered _last_bar = entered, []
 end
 
-let make_dummy_strategy () : E.strategy =
-  { id = "dummy";
-    session_start_min = 0;
+let make_dummy_strategy () : E.pure_strategy =
+  let env = {
+    Strategy_fast.Engine.Strategy_sig.session_start_min = 0;
     session_end_min = 1440;
-    build_setups = None;
-    policy = (module Dummy_policy);
+    qty = 1.0;
+    cost = {
+      tick_size = 0.25;
+      tick_value = 12.5;
+      slippage_roundtrip_ticks = 0.0;
+      fee_per_contract = 0.0;
+      equity_base = None;
+    };
+    exec = Execution_params.legacy ~tick_size:0.25;
+  } in
+  { E._id = "dummy_v2";
+    env;
+    build_setups = Some (fun _ -> Date.Table.create ());
+    strategy = (module Dummy_intent);
   }
 
 let make_bars n : Types.bar_1m list =
   let date = Date.of_string "2020-01-02" in
   List.init n ~f:(fun i ->
       let ts = { date; minute_of_day = i } in
-      { ts; open_ = 0.; high = 0.; low = 0.; close = Float.of_int i; volume = 0. })
+      { ts; open_ = 0.; high = Float.of_int (i + 1); low = Float.of_int i; close = Float.of_int i; volume = 0. })
 
 module List_stream (B : sig val bars : Types.bar_1m list end) : Engine.Multi_engine.BAR_STREAM = struct
   let iter ~f = List.iter B.bars ~f
@@ -114,14 +123,10 @@ let%test_unit "run_shared_with_stream is deterministic on synthetic bars" =
   let r2 = run_once () in
   match r1, r2 with
   | [a], [b] ->
-      assert (String.equal a.strategy_id "dummy");
-      assert (List.length a.trades = 1);
-      assert (List.length b.trades = 1);
-      let tol = 1e-9 in
-      let ra = (List.hd_exn a.trades).pnl_R in
-      let rb = (List.hd_exn b.trades).pnl_R in
-      assert (Float.(abs (ra -. 7.) < tol));
-      assert (Float.(abs (rb -. 7.) < tol));
-      assert (Float.(abs (ra -. rb) < tol));
-      assert (List.equal Date.equal (List.map ~f:fst a.daily_pnl) (List.map ~f:fst b.daily_pnl))
+      assert (String.equal a.strategy_id "dummy_v2");
+      let tol = 1e-6 in
+      assert (Int.equal (List.length a.trades) (List.length b.trades));
+      let pa = List.fold a.trades ~init:0.0 ~f:(fun acc t -> acc +. t.pnl_R) in
+      let pb = List.fold b.trades ~init:0.0 ~f:(fun acc t -> acc +. t.pnl_R) in
+      assert (Float.(abs (pa -. pb) < tol))
   | _ -> assert false
