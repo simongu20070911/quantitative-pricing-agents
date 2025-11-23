@@ -113,6 +113,33 @@ modules:
       - "export_trades_csv : outfile:string -> trades:Types.trade list -> unit"
       - "export_daily_csv : outfile:string -> daily:(Date.t * float) list -> ?daily_usd:(Date.t * float) list -> ?daily_pct:(Date.t * float) list -> unit -> unit"
 
+  - name: Execution_params
+    file_ml: agents_workspace/lib/engine/execution_params.ml
+    file_mli: agents_workspace/lib/engine/execution_params.mli
+    summary: Execution microstructure settings (spread, slip model, break-even policy, exit priority, RNG) with defaults and helpers.
+    provides_types:
+      - Execution_params.slip_model
+      - Execution_params.exit_priority
+      - Execution_params.t
+    provides_values:
+      - "default : tick_size:float -> Execution_params.t"
+      - "legacy : tick_size:float -> Execution_params.t"
+      - "apply_tick : Execution_params.t -> float -> float"
+      - "copy_rng : Execution_params.t -> Execution_params.t"
+      - "with_seed : Execution_params.t -> int -> Execution_params.t"
+
+  - name: Execution_model
+    file_ml: agents_workspace/lib/engine/execution_model.ml
+    file_mli: agents_workspace/lib/engine/execution_model.mli
+    summary: Deterministic intrabar price paths plus spread/slippage adjustment with reproducible RNG.
+    provides_types:
+      - Execution_model.side
+      - Execution_model.rng
+    provides_values:
+      - "make_rng : ?seed:int -> unit -> Execution_model.rng"
+      - "path_prices : Types.bar_1m -> float array"
+      - "adjust_price : params:Execution_params.t -> side:Execution_model.side -> rng:Execution_model.rng -> float -> float"
+
   - name: Policy_sig
     file_ml: agents_workspace/lib/engine/policy_sig.ml
     file_mli: agents_workspace/lib/engine/policy_sig.mli
@@ -122,7 +149,7 @@ modules:
   - name: Strategy_sig
     file_ml: agents_workspace/lib/engine/strategy_sig.ml
     file_mli: agents_workspace/lib/engine/strategy_sig.mli
-    summary: Pure strategy interface with runtime env and per-bar callbacks.
+    summary: Pure strategy interface with runtime env (session, qty, cost, exec) and per-bar callbacks.
     provides_types:
       - Strategy_sig.env
     provides_values: []
@@ -130,9 +157,10 @@ modules:
   - name: Trade_transition
     file_ml: agents_workspace/lib/engine/trade_transition.ml
     file_mli: agents_workspace/lib/engine/trade_transition.mli
-    summary: Stateless trade lifecycle transition for a single trade_plan.
+    summary: Stateless trade lifecycle transition for a single trade_plan with optional execution microstructure.
     provides_values:
       - "step : plan:Types.trade_plan -> state:Types.trade_state -> bar:Types.bar_1m -> record_trade:(active:Types.active_state -> exit_ts:Types.timestamp -> exit_price:float -> exit_reason:Types.exit_reason -> 'a) -> Types.trade_state * 'a list"
+      - "step_with_exec : exec:Execution_params.t -> qty:float -> plan:Types.trade_plan -> state:Types.trade_state -> bar:Types.bar_1m -> record_trade:(active:Types.active_state -> exit_ts:Types.timestamp -> exit_price:float -> exit_reason:Types.exit_reason -> 'a) -> Types.trade_state * 'a list"
 
   - name: Engine
     file_ml: agents_workspace/lib/engine/engine.ml
@@ -263,7 +291,7 @@ modules:
   - name: Strategy_common
     file_ml: agents_workspace/lib/strategies/common/strategy_common.ml
     file_mli: agents_workspace/lib/strategies/common/strategy_common.mli
-    summary: Shared trade construction, cost/session parameter helpers, tunable surfaces, and setup utilities.
+    summary: Shared trade construction, cost/session parameter helpers, execution/env tunables, and setup utilities.
     provides_types:
       - Strategy_common.Tunables.env_defaults
       - Strategy_common.Tunables.param_field
@@ -278,9 +306,9 @@ modules:
       - "Tunables.parameter_specs_of_table : 'p Strategy_common.Tunables.param_field list -> Parameters.t list"
       - "Tunables.params_of_table : defaults:'p -> param_table:'p Strategy_common.Tunables.param_field list -> Parameters.value_map -> 'p"
       - "Tunables.make : defaults_env:Strategy_common.Tunables.env_defaults -> defaults_params:'p -> param_table:'p Strategy_common.Tunables.param_field list -> Parameters.t list * (Parameters.value_map -> Strategy_common.Tunables.env_defaults * 'p)"
-      - "Env.of_config : session_start_min:int -> session_end_min:int -> qty:float -> cost:Cost_model.config -> Strategy_sig.env"
+      - "Env.of_config : session_start_min:int -> session_end_min:int -> qty:float -> cost:Cost_model.config -> ?exec:Execution_params.t -> unit -> Strategy_sig.env"
       - "Session.within : start:int -> end_:int -> Types.bar_1m -> bool"
-      - "Session.eod_flat : qty:float -> ?r_pts:float -> Cost_model.config -> direction:Types.direction -> entry_ts:Types.timestamp -> entry_px:float -> last_bar:Types.bar_1m -> meta:(string * string) list -> Types.trade"
+      - "Session.eod_flat : qty:float -> ?r_pts:float -> Cost_model.config -> Types.direction -> entry_ts:Types.timestamp -> entry_px:float -> last_bar:Types.bar_1m -> meta:(string * string) list -> Types.trade"
       - "Setup.noop : string -> Types.setup Core.Date.Table.t"
       - "Setups.with_params : params:'p -> ('p -> string -> Types.setup Core.Date.Table.t) -> string -> Types.setup Core.Date.Table.t"
       - "Strategy_builder.make_pure : id:string -> env:Strategy_sig.env -> ?build_setups:(string -> Types.setup Core.Date.Table.t) -> (module Strategy_sig.S) -> Engine.pure_strategy"
@@ -331,7 +359,7 @@ modules:
   - name: Strategy_b1b2
     file_ml: agents_workspace/lib/strategies/b1b2/strategy_b1b2.ml
     file_mli: agents_workspace/lib/strategies/b1b2/strategy_b1b2.mli
-    summary: Pure strategy wrapper for classic B1/B2 setup with session/qty/cost tuning and param overrides.
+    summary: Pure strategy wrapper for classic B1/B2 setup with session/qty/cost/exec tuning and param overrides.
     provides_types:
       - Strategy_b1b2.config
     provides_values:
@@ -342,10 +370,12 @@ modules:
       - "session_window : Strategy_b1b2.config -> int * int"
       - "qty : Strategy_b1b2.config -> float"
       - "cost : Strategy_b1b2.config -> Cost_model.config"
+      - "exec : Strategy_b1b2.config -> Execution_params.t"
       - "with_params : params:B1b2_params.t -> Strategy_b1b2.config -> Strategy_b1b2.config"
       - "with_cost : cost:Cost_model.config -> Strategy_b1b2.config -> Strategy_b1b2.config"
       - "with_qty : qty:float -> Strategy_b1b2.config -> Strategy_b1b2.config"
       - "with_session : start:int -> end_:int -> Strategy_b1b2.config -> Strategy_b1b2.config"
+      - "with_exec : exec:Execution_params.t -> Strategy_b1b2.config -> Strategy_b1b2.config"
       - "params : Strategy_b1b2.config -> B1b2_params.t"
       - "pure_strategy : Strategy_b1b2.config -> Engine.pure_strategy"
       - strategy_pure : Engine.pure_strategy
@@ -399,7 +429,7 @@ modules:
   - name: Strategy_fast
     file_ml: agents_workspace/lib/strategy_fast.ml
     file_mli: null
-    summary: Umbrella module re-exporting core, engine, feature, plot, strategy modules, and strategy registry for CLI builds.
+    summary: Umbrella module re-exporting core, engine, feature, plot, strategy modules, execution helpers, and strategy registry for CLI builds.
     provides_values: []
 
   - name: Trade_transition_tests
@@ -442,6 +472,12 @@ modules:
     file_ml: agents_workspace/tests/multi_engine_shared_tests.ml
     file_mli: null
     summary: Parity and determinism tests for Multi_engine shared-stream runners.
+    provides_values: []
+
+  - name: Execution_path_slip_tests
+    file_ml: agents_workspace/tests/execution_path_slip_tests.ml
+    file_mli: null
+    summary: Tests execution microstructure (spread/slip, path priority, BE intrabar) via Trade_transition.step_with_exec.
     provides_values: []
 
   - name: Property_determinism_tests
@@ -507,13 +543,12 @@ signatures:
 
   - name: Strategy_sig.S
     file_mli: agents_workspace/lib/engine/strategy_sig.mli
-    description: Pure strategy callbacks operating with Strategy_sig.env.
+    description: Pure strategy callbacks operating with Strategy_sig.env (session, qty, cost, exec).
     types:
       - state
     values:
       - "init : Types.setup option -> state"
       - "step : Strategy_sig.env -> state -> Types.bar_1m -> state * Types.trade list"
-    
       - "finalize_day : Strategy_sig.env -> state -> Types.bar_1m option -> state * Types.trade list"
     implemented_by:
       - Strategy_b1b2.Pure
@@ -648,6 +683,30 @@ types:
     description: Slippage, fee, and optional equity_base parameters used to adjust trades.
     representation: record
 
+  - name: Execution_params.slip_model
+    defined_in_module: Execution_params
+    file_mli: agents_workspace/lib/engine/execution_params.mli
+    description: Slippage model choices (none, constant ticks, probabilistic one-tick).
+    representation: variant
+
+  - name: Execution_params.exit_priority
+    defined_in_module: Execution_params
+    file_mli: agents_workspace/lib/engine/execution_params.mli
+    description: Exit resolution priority when stop and target touch in the same bar.
+    representation: variant
+
+  - name: Execution_params.t
+    defined_in_module: Execution_params
+    file_mli: agents_workspace/lib/engine/execution_params.mli
+    description: Execution configuration (tick size, spread, slippage model, BE policy, exit ordering, RNG).
+    representation: record
+
+  - name: Execution_model.side
+    defined_in_module: Execution_model
+    file_mli: agents_workspace/lib/engine/execution_model.mli
+    description: Buy/sell marker used for slip/spread adjustment.
+    representation: variant
+
   - name: Strategy_common.Tunables.env_defaults
     defined_in_module: Strategy_common
     file_mli: agents_workspace/lib/strategies/common/strategy_common.mli
@@ -699,7 +758,7 @@ types:
   - name: Strategy_sig.env
     defined_in_module: Strategy_sig
     file_mli: agents_workspace/lib/engine/strategy_sig.mli
-    description: Runtime environment (session window, qty, cost) passed to pure strategies.
+    description: Runtime environment (session window, qty, cost, execution params) passed to pure strategies.
     representation: record
 
   - name: Engine.strategy
@@ -741,7 +800,7 @@ types:
   - name: Strategy_b1b2.config
     defined_in_module: Strategy_b1b2
     file_mli: agents_workspace/lib/strategies/b1b2/strategy_b1b2.mli
-    description: Session window, qty, cost, and param configuration for B1/B2 strategy packaging.
+    description: Session window, qty, cost, execution params, and param configuration for B1/B2 strategy packaging.
     representation: abstract
 
   - name: Vwap_revert_strategy.config

@@ -5,6 +5,7 @@ type env = {
   session_end_min   : int;
   qty : float;
   cost : Cost_model.config;
+  exec : Execution_params.t;
 }
 
 (** Pure, opaque strategy interface (no callbacks). *)

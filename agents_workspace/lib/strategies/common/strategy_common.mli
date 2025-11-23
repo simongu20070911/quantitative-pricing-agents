@@ -73,6 +73,8 @@ module Env : sig
     -> session_end_min:int
     -> qty:float
     -> cost:Cost_model.config
+    -> ?exec:Execution_params.t
+    -> unit
     -> Strategy_sig.env
 end
 

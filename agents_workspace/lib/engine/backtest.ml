@@ -22,8 +22,8 @@ module Policy_from_config (Cfg : sig
   let make_trade ~(plan : trade_plan) ~(active : active_state)
       ~(exit_ts : timestamp) ~(exit_price : float) ~(reason : exit_reason) =
     Trade_base.make_raw
-      ~qty:1.0 ~r_pts:plan.r_pts ~direction:plan.direction
-      ~entry_ts:active.entry_ts ~entry_px:plan.entry_price
+      ~qty:active.qty ~r_pts:plan.r_pts ~direction:plan.direction
+      ~entry_ts:active.entry_ts ~entry_px:active.entry_price
       ~exit_ts ~exit_px:exit_price ~exit_reason:reason
       ~meta:[
         ("target_mult", Float.to_string plan.target_mult);

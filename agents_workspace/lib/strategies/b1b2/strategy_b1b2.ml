@@ -13,6 +13,7 @@ type config = {
   session_end_min   : int;
   qty : float;
   cost : Cost_model.config;
+  exec : Execution_params.t;
   params : P.t;
 }
 
@@ -35,6 +36,7 @@ let default_config = {
   session_end_min = default_env.session_end_min;
   qty = default_env.qty;
   cost = default_env.cost;
+  exec = Execution_params.default ~tick_size:default_env.cost.tick_size;
   params = default_params;
 }
 
@@ -67,16 +69,19 @@ let config_of_params (m : Parameters.value_map) : config =
     session_end_min = env.session_end_min;
     qty = env.qty;
     cost;
+    exec = Execution_params.default ~tick_size:cost.tick_size;
     params; }
 
 let session_window cfg = cfg.session_start_min, cfg.session_end_min
 let qty cfg = cfg.qty
 let cost cfg = cfg.cost
+let exec cfg = cfg.exec
 let params cfg = cfg.params
 let with_cost ~cost cfg = { cfg with cost }
 let with_qty ~qty cfg = { cfg with qty }
 let with_params ~params cfg = { cfg with params }
 let with_session ~start ~end_ cfg = { cfg with session_start_min = start; session_end_min = end_ }
+let with_exec ~exec cfg = { cfg with exec }
 
 let record_trade ~(cfg : config) ~(plan : trade_plan) ~(active : active_state)
     ~(exit_ts : timestamp) ~(exit_price : float) ~(reason : exit_reason) =
@@ -89,8 +94,9 @@ let record_trade ~(cfg : config) ~(plan : trade_plan) ~(active : active_state)
        match plan.b2_follow with Follow_good -> "good" | Follow_poor -> "poor");
     ]
   in
-  SC.Trade.make ~qty:cfg.qty ~r_pts:plan.r_pts cfg.cost plan.direction
-    ~entry_ts:active.entry_ts ~entry_px:plan.entry_price
+  let qty = active.qty in
+  SC.Trade.make ~qty ~r_pts:plan.r_pts cfg.cost plan.direction
+    ~entry_ts:active.entry_ts ~entry_px:active.entry_price
     ~exit_ts ~exit_px:exit_price ~reason ~meta
 
 let downgrade_if_needed plan ~minute_of_day =
@@ -142,9 +148,9 @@ module Pure (Cfg : sig val cfg : config end) : SS.S = struct
     match state.plan, state.trade_state, last_bar with
     | Some plan, Active active, Some lb ->
         let trade =
-          SC.Session.eod_flat ~qty:Cfg.cfg.qty ~r_pts:plan.r_pts Cfg.cfg.cost
+          SC.Session.eod_flat ~qty:active.qty ~r_pts:plan.r_pts Cfg.cfg.cost
             ~direction:plan.direction ~entry_ts:active.entry_ts
-            ~entry_px:plan.entry_price ~last_bar:lb
+            ~entry_px:active.entry_price ~last_bar:lb
             ~meta:[
               ("strategy", strategy_id);
               ("target_mult", Float.to_string plan.target_mult);
@@ -167,6 +173,8 @@ let make_pure_strategy cfg =
       ~session_end_min:cfg.session_end_min
       ~qty:cfg.qty
       ~cost:cfg.cost
+      ~exec:cfg.exec
+      ()
   in
   let module S = Pure(struct let cfg = cfg end) in
   SC.Strategy_builder.make_pure ~id:strategy_id ~env

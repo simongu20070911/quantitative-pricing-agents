@@ -265,6 +265,8 @@ let pure_strategy cfg =
       ~session_end_min:cfg.session_end_min
       ~qty:cfg.qty
       ~cost:cfg.cost
+      ~exec:(Execution_params.default ~tick_size:cfg.cost.tick_size)
+      ()
   in
   let module S = Pure(struct let cfg = cfg end) in
   SC.Strategy_builder.make_pure ~id:strategy_id ~env (module S)

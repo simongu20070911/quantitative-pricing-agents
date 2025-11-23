@@ -104,6 +104,8 @@ type active_state = {
   mutable stop_price : float;
   mutable moved_to_be : bool;
   entry_ts           : timestamp;
+  mutable entry_price : float;
+  mutable qty : float;
 }
 
 type trade_state =

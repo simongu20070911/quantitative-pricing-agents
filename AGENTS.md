@@ -4,7 +4,7 @@ you only work and put files in the agents_workspace folder. that is the only all
 if the user doesn't explicitly trigger you to update inventory, no need to maintain. 
 the user has several commands that he'd gonna order you to execute. the user might say, execute command "command name", and then you will execute those commands. 
 ocaml is installed on this system. activate and manage it using eval "$(opam env --switch=5.4.0 --set-switch)"
-read the inventory file always before work. 
+read the inventory file always before work. the inventory might be not up to date, but it'll give you a good rough idea of the repo. 
 command 1: maintain project inventory:{
     this command tells you that you must maintain a structured inventory of the agents_workspace. this is important because it gives you context on what & how to work efficiently, with the goal in mind that to utilize modular peices of codes across your work, so that your work remains consistent and easy to maintain. 
     the way you to this is by maintaining a single source of truth at agents_workspace/project_inventory.yaml, by inspecting the project carefully. you think about how to do that, considering that the files and the inventory might be very out of sync. the inventory always try to reflect the current full state of the workspace folder. 
@@ -30,3 +30,8 @@ constraints: (these are the core guardrails\principles that you must explicitly 
 
 principles to keep in mind when coding: 
 Safe from bugs, easy to understand, ready for change. 
+testing is an integral part of development. 
+
+background information: 
+the US market RTH for ES is from 9:30 am to 4:15 pm ET. 
+real full data for es: /Users/simongu/Documents/Library_QPA/QPA/es.c.0-20100606-20251116.et.ohlcv-1m.csv

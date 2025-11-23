@@ -152,6 +152,12 @@ module Tunables = struct
 end
 
 module Env = struct
-  let of_config ~session_start_min ~session_end_min ~qty ~cost : Strategy_sig.env =
-    { Strategy_sig.session_start_min; session_end_min; qty; cost }
+  let of_config ~session_start_min ~session_end_min ~qty ~(cost : Cost_model.config)
+      ?exec () : Strategy_sig.env =
+    let exec =
+      match exec with
+      | Some e -> e
+      | None -> Execution_params.legacy ~tick_size:cost.tick_size
+    in
+    { Strategy_sig.session_start_min; session_end_min; qty; cost; exec }
 end
