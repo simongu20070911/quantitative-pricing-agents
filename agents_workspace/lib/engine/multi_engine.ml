@@ -3,8 +3,6 @@ open Types
 module Pnl = Pnl_agg
 module EV2 = Engine_v2
 
-[@@@warning "-32-69"]
-
 type run_result = {
   strategy_id : string;
   setups      : setup Date.Table.t;
@@ -93,6 +91,8 @@ let finalize_day (Strat ctx) : ctx =
         List.partition_tf cmds ~f:(function
             | Strategy_sig.Submit_bracket _
             | Strategy_sig.Update_all _
+            | Strategy_sig.Update_stop _
+            | Strategy_sig.Update_target _
             | Strategy_sig.Cancel_all -> true
             | Strategy_sig.Flatten_all _ -> false)
       in
@@ -148,6 +148,8 @@ let step_ctx (Strat ctx0) (bar : bar_1m) : ctx =
         List.partition_tf cmds ~f:(function
             | Strategy_sig.Submit_bracket _
             | Strategy_sig.Update_all _
+            | Strategy_sig.Update_stop _
+            | Strategy_sig.Update_target _
             | Strategy_sig.Cancel_all -> true
             | Strategy_sig.Flatten_all _ -> false)
       in

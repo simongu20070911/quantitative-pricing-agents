@@ -8,6 +8,7 @@ module Parameters = Parameters
 module Guardrails = Guardrails
 module Execution_params = Execution_params
 module Execution_model = Execution_model
+module Trade_base = Trade_base
 module Order_book = Order_book
 module Execution_engine = Execution_engine
 module Engine_v2 = Engine_v2

@@ -5,8 +5,6 @@ open Csv_parser
 open Indicators
 module P = B1b2_params.Setup
 
-[@@@warning "-27-32-69"]
-
 type agg_tables = {
   day_macro_tbl : day_macro Date.Table.t;
   b1_tbl : bar_5m Date.Table.t;
@@ -142,12 +140,6 @@ let build_setups (params : P.t) (tables : agg_tables) : setup Date.Table.t =
   setups_tbl
 
 (* Top-level: stream bars, aggregate intermediates, then build setups. *)
-let build (params : P.t) filename : setup Date.Table.t =
-  let process_bar, finalize = init_aggregators params in
-  iter_bars filename ~f:process_bar;
-  let tables = finalize () in
-  build_setups params tables
-
 let build (params : P.t) filename : setup Date.Table.t =
   let process_bar, finalize = init_aggregators params in
   iter_bars filename ~f:process_bar;

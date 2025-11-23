@@ -2,8 +2,6 @@ open Core
 open Types
 open Time_utils
 
-[@@@warning "-27-32-69"]
-
 let parse_bar_1m line : bar_1m =
   (* Accept either column order:
      - ts_event first, ET_datetime absent (10 columns)
@@ -21,7 +19,7 @@ let parse_bar_1m line : bar_1m =
     { ts; open_; high; low; close; volume }
   in
   match fields with
-  | [ ts_event; _rtype; _publisher_id; _instr_id;
+  | [ _ts_event; _rtype; _publisher_id; _instr_id;
       open_s; high_s; low_s; close_s; volume_s; _symbol; et_ts ] ->
       parse et_ts open_s high_s low_s close_s volume_s
   | [ ts_event; _rtype; _publisher_id; _instr_id;

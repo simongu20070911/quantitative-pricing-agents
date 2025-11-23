@@ -1,7 +1,5 @@
 open Core
 
-[@@@warning "-27-32-69"]
-
 let vol_target_units ~max ~signal ~sigma =
   match sigma with
   | None -> 0

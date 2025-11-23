@@ -8,8 +8,6 @@ module SC = Strategy_common
 module SS = Strategy_sig
 module Params = Vwap_revert_params
 
-[@@@warning "-32"]
-
 (* Config *)
 type config = {
   session_start_min : int;
@@ -56,8 +54,6 @@ let param_table : Params.t SC.Tunables.param_field list =
         description = f.description;
         set = f.set; })
 
-let default_env = defaults_env
-
 let parameter_specs, config_parts_of_params =
   SC.Tunables.make
     ~defaults_env
@@ -99,10 +95,6 @@ type state = {
   position : position;
   cfg : config;
 }
-
-let init_state cfg = { features = F.create (); position = Flat; cfg }
-
-let init_day cfg (_setup_opt : setup option) = init_state cfg
 
 let compute_signal cfg (snap : F.snapshot) : float option =
   match snap.z_vwap, snap.ofi_long, snap.rv_ratio, snap.trend with

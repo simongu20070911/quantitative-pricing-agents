@@ -1,8 +1,6 @@
 open Core
 open Types
 
-[@@@warning "-27-32-69"]
-
 let mean xs =
   match xs with
   | [] -> None

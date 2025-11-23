@@ -36,6 +36,27 @@ let make_bracket_order ~id ~ts ~(cmd : Strategy_sig.order_cmd) =
       }
   | _ -> None
 
+let update_stop ~(ts : timestamp) ~(f : trade_plan -> float) (o : order) : order =
+  match o.kind with
+  | Bracket plan ->
+      let stop_price = f plan in
+      let kind = Bracket { plan with stop_init = stop_price } in
+      let trade_state =
+        match o.trade_state with
+        | Active a ->
+            a.stop_price <- stop_price;
+            Active a
+        | _ -> o.trade_state
+      in
+      { o with kind; trade_state; updated_ts = ts }
+
+let update_target ~(ts : timestamp) ~(f : trade_plan -> float) (o : order) : order =
+  match o.kind with
+  | Bracket plan ->
+      let target_price = f plan in
+      let kind = Bracket { plan with target_price } in
+      { o with kind; updated_ts = ts }
+
 let apply_cmd t ~ts (cmd : Strategy_sig.order_cmd) : t =
   match cmd with
   | Strategy_sig.Submit_bracket _ ->
@@ -54,6 +75,12 @@ let apply_cmd t ~ts (cmd : Strategy_sig.order_cmd) : t =
                   updated_ts = ts; }
             )
       in
+      { t with orders }
+  | Strategy_sig.Update_stop f ->
+      let orders = List.map t.orders ~f:(update_stop ~ts ~f) in
+      { t with orders }
+  | Strategy_sig.Update_target f ->
+      let orders = List.map t.orders ~f:(update_target ~ts ~f) in
       { t with orders }
   | Strategy_sig.Cancel_all ->
       let orders =

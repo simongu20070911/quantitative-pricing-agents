@@ -1,8 +1,6 @@
 open Core
 open Types
 
-[@@@warning "-27-32-69"]
-
 let minute_ofday_of_string s =
   let hour = Int.of_string (String.sub s ~pos:0 ~len:2) in
   let min  = Int.of_string (String.sub s ~pos:3 ~len:2) in

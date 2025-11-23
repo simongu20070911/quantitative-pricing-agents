@@ -1,7 +1,5 @@
 open Core
 
-[@@@warning "-27-32-69"]
-
 (* Basic categorical types *)
 type direction = Long | Short
 

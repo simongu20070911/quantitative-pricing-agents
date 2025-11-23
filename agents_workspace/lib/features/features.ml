@@ -2,8 +2,6 @@ open Core
 open Types
 open Time_utils
 
-[@@@warning "-27-32-69"]
-
 module Rolling = struct
   type t = {
     window   : float Deque.t;
@@ -75,7 +73,6 @@ module Rolling_sum = struct
       | Some old -> t.sum <- t.sum -. old
 
   let total t = if Deque.is_empty t.window then None else Some t.sum
-  let length t = Deque.length t.window
 end
 
 module Vwap = struct
@@ -277,7 +274,7 @@ let signed_volume ~prev_close ~close ~volume =
   else 0.
 
 let update s (bar : bar_1m) : state =
-  let { ts = { date; minute_of_day }; open_; high; low; close; volume } = bar in
+  let { ts = { date; minute_of_day }; open_ = _; high; low; close; volume } = bar in
 
   update_date_if_needed s date;
 
@@ -315,11 +312,6 @@ let update s (bar : bar_1m) : state =
   if minute_of_day = rth_end_min then Overnight.set_prev_close s.overnight ~close;
   s.last_close <- Some close;
   s
-
-let ofi_ratio signed total =
-  match signed, total with
-  | Some s, Some v when Float.(v > 0.) -> Some (s /. v)
-  | _ -> None
 
 let snapshot (s : state) : snapshot =
   let base_price =

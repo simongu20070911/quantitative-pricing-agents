@@ -1,8 +1,6 @@
 open Core
 open Types
 
-[@@@warning "-27-32-69"]
-
 type config = {
   tick_size : float;
   tick_value : float;

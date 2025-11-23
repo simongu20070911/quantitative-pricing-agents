@@ -1,7 +1,5 @@
 open Core
 
-[@@@warning "-27-32-69"]
-
 (* Rolling Average Bar Range (ABR) over last N bars. *)
 module Abr = struct
   type t = {

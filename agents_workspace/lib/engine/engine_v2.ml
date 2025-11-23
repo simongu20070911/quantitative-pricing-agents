@@ -66,6 +66,8 @@ let run_pure (strategy : pure_strategy) ~(filename : string) : run_result =
           List.partition_tf cmds ~f:(function
               | Strategy_sig.Submit_bracket _
               | Strategy_sig.Update_all _
+              | Strategy_sig.Update_stop _
+              | Strategy_sig.Update_target _
               | Strategy_sig.Cancel_all -> true
               | Strategy_sig.Flatten_all _ -> false)
         in
@@ -123,6 +125,8 @@ let run_pure (strategy : pure_strategy) ~(filename : string) : run_result =
           List.partition_tf cmds ~f:(function
               | Strategy_sig.Submit_bracket _
               | Strategy_sig.Update_all _
+              | Strategy_sig.Update_stop _
+              | Strategy_sig.Update_target _
               | Strategy_sig.Cancel_all -> true
               | Strategy_sig.Flatten_all _ -> false)
         in

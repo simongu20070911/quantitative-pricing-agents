@@ -16,6 +16,8 @@ type order_cmd =
       meta : (string * string) list;
     }
   | Update_all of (trade_plan -> trade_plan)
+  | Update_stop of (trade_plan -> float)
+  | Update_target of (trade_plan -> float)
   | Cancel_all
   | Flatten_all of {
       reason : exit_reason;
