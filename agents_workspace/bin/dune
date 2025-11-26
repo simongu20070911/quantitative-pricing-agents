@@ -20,7 +20,14 @@
  (preprocess (pps ppx_jane)))
 
 (executable
- (name list_setup_days)
- (modules list_setup_days)
+(name list_setup_days)
+(modules list_setup_days)
+(libraries core core_unix strategy_fast)
+(preprocess (pps ppx_jane)))
+
+(executable
+ (name open_range_breakout_main)
+ (modules open_range_breakout_main)
+ (public_name orb30)
  (libraries core core_unix strategy_fast)
  (preprocess (pps ppx_jane)))

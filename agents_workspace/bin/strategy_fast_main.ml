@@ -1,28 +1,6 @@
 open Core
-
-let ensure_dir dir =
-  try Core_unix.mkdir dir ~perm:0o755 with _ -> ()
-
-let run_python_plot ~trades_csv ~daily_csv ~outdir =
-  let script = Filename.concat "tools" "plot_trades.py" in
-  if not (Stdlib.Sys.file_exists script) then
-    eprintf "Python plotter not found at %s; skipping\n%!" script
-  else
-    let cmd =
-      Printf.sprintf "python3 %s --trades %s --daily %s --outdir %s"
-        script trades_csv daily_csv outdir
-    in
-    match Stdlib.Sys.command cmd with
-    | 0 -> ()
-    | c -> eprintf "Python plot command exited with code %d\n%!" c
-
-let plot dir (result : Strategy_fast.Engine.Engine.run_result) =
-  ensure_dir dir;
-  let open Strategy_fast.Plot.Plotter in
-  render_equity ~outfile:(Filename.concat dir "equity_trades.png") ~trades:result.trades;
-  render_daily_curve ~outfile:(Filename.concat dir "equity_daily.png") ~daily:result.daily_pnl;
-  let pnl = List.map result.trades ~f:(fun t -> t.pnl_R) |> Array.of_list in
-  render_histogram ~outfile:(Filename.concat dir "pnl_hist.png") ~values:pnl ~bins:40
+module EP = Strategy_fast.Engine.Execution_params
+module Cli = Strategy_fast.Cli_helpers
 
 let main ?plot_dir ?export_trades ?export_daily ?plot_python ~cfg filename =
   let strat = Strategy_fast.Strategies.Strategy_b1b2.pure_strategy cfg in
@@ -34,21 +12,9 @@ let main ?plot_dir ?export_trades ?export_daily ?plot_python ~cfg filename =
   let stats = Strategy_fast.Summary.compute_stats ~daily_usd:result.daily_pnl_usd ~daily_pct:result.daily_pnl_pct result.trades result.daily_pnl in
   Strategy_fast.Summary.print_stats stats;
   Strategy_fast.Summary.print_sample_trades result.trades 5;
-  Option.iter export_trades ~f:(fun outfile ->
-      Strategy_fast.Summary.export_trades_csv ~outfile ~trades:result.trades);
-  Option.iter export_daily ~f:(fun outfile ->
-      Strategy_fast.Summary.export_daily_csv ~outfile ~daily:result.daily_pnl ~daily_usd:result.daily_pnl_usd ~daily_pct:result.daily_pnl_pct ());
-  Option.iter plot_dir ~f:(fun d -> plot d result)
-  |> fun () ->
-  (match plot_python with
-   | Some dir ->
-       ensure_dir dir;
-       let trades_csv = Filename.concat dir "trades.csv" in
-       let daily_csv  = Filename.concat dir "daily.csv" in
-       Strategy_fast.Summary.export_trades_csv ~outfile:trades_csv ~trades:result.trades;
-       Strategy_fast.Summary.export_daily_csv  ~outfile:daily_csv  ~daily:result.daily_pnl ~daily_usd:result.daily_pnl_usd ~daily_pct:result.daily_pnl_pct ();
-       run_python_plot ~trades_csv ~daily_csv ~outdir:dir
-   | None -> ())
+  Cli.apply_outputs
+    ~opts:(Cli.outputs ?plot_dir ?export_trades ?export_daily ?plot_python ())
+    ~result
 
 let () =
   let argv = Sys.get_argv () in
@@ -63,7 +29,6 @@ let () =
   let export_daily  = ref None in
   let plot_python   = ref None in
   let fee = ref None in
-  let slip = ref None in
   let qty = ref None in
   let equity = ref None in
   let rec parse i =
@@ -80,8 +45,6 @@ let () =
           plot_python := Some argv.(i+1); parse (i+2)
       | "--cost-fee" when i + 1 < Array.length argv ->
           fee := Float.of_string_opt argv.(i+1); parse (i+2)
-      | "--cost-slippage" when i + 1 < Array.length argv ->
-          slip := Float.of_string_opt argv.(i+1); parse (i+2)
       | "--qty" when i + 1 < Array.length argv ->
           qty := Float.of_string_opt argv.(i+1); parse (i+2)
       | "--equity-base" when i + 1 < Array.length argv ->
@@ -99,14 +62,18 @@ let () =
       let cost =
         { base_cost with
           fee_per_contract = Option.value !fee ~default:0.;
-          slippage_roundtrip_ticks = Option.value !slip ~default:0.;
           equity_base = (match !equity with None -> base_cost.equity_base | Some x -> if Float.(x <= 0.) then None else Some x);
         }
+      in
+      let base_exec = B.exec base in
+      let exec =
+        base_exec
       in
       let cfg =
         base
         |> B.with_qty ~qty:(Option.value !qty ~default:(B.qty base))
         |> B.with_cost ~cost
+        |> B.with_exec ~exec
       in
       main ~cfg ?plot_dir:!plot_dir ?export_trades:!export_trades
         ?export_daily:!export_daily ?plot_python:!plot_python file

@@ -1,0 +1,2 @@
+(include_subdirs no)
+(data_only_dirs .)

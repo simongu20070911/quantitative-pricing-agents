@@ -15,6 +15,7 @@ type config = {
   qty : float;
   params : Params.t;
   cost : Cost_model.config;
+  exec : Execution_params.t;
 }
 
 let defaults_params = Params.defaults
@@ -26,7 +27,6 @@ let defaults_env = {
   cost = {
     tick_size = 0.25;
     tick_value = 12.5;
-    slippage_roundtrip_ticks = 1.0;
     fee_per_contract = 4.0;
     equity_base = None;
   };
@@ -38,6 +38,7 @@ let make_config ~env ~params ~cost = {
   qty = env.qty;
   params;
   cost;
+  exec = Execution_params.default ~tick_size:cost.tick_size ();
 }
 
 let default_config = make_config ~env:defaults_env ~params:defaults_params ~cost:defaults_env.cost
@@ -67,11 +68,13 @@ let config_of_params (m : Parameters.value_map) : config =
 let session_window cfg = cfg.session_start_min, cfg.session_end_min
 let qty cfg = cfg.qty
 let cost cfg = cfg.cost
+let exec cfg = cfg.exec
 let with_cost ~cost cfg = { cfg with cost }
 let with_s_entry ~s_entry cfg = { cfg with params = { cfg.params with s_entry } }
 let with_z_exit ~z_exit cfg = { cfg with params = { cfg.params with z_exit } }
 let with_session ~start ~end_ cfg = { cfg with session_start_min = start; session_end_min = end_ }
 let with_qty ~qty cfg = { cfg with qty }
+let with_exec ~exec cfg = { cfg with exec }
 
 type position =
   | Flat
@@ -254,7 +257,7 @@ let pure_strategy cfg =
       ~session_end_min:cfg.session_end_min
       ~qty:cfg.qty
       ~cost:cfg.cost
-      ~exec:(Execution_params.default ~tick_size:cfg.cost.tick_size)
+      ~exec:cfg.exec
       ()
   in
   let module S = Intent(struct let cfg = cfg end) in

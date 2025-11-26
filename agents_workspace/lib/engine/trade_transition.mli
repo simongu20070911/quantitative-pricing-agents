@@ -26,12 +26,3 @@ val step :
     trades (possibly multiple partials). The [record_trade] callback builds domain-specific
     trade records (e.g., with costs/qty). It must be pure; callers handle accumulation.
 *)
-
-val step_with_exec :
-  exec:Execution_params.t ->
-  plan:trade_plan ->
-  state:trade_state ->
-  bar:bar_1m ->
-  record_trade:(active:active_state -> exit_ts:timestamp -> exit_price:float -> exit_qty:float -> exit_reason:exit_reason -> 'a) ->
-  trade_state * 'a list
-(** Alias to [step] kept for compatibility. *)

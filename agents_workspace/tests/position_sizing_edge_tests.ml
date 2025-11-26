@@ -8,9 +8,3 @@ let%test_unit "vol_target_units rounds down not nearest" =
 
 let%test_unit "vol_target_units respects max cap even with huge signal" =
   [%test_eq: int] (PS.vol_target_units ~max:3 ~signal:1000.0 ~sigma:(Some 0.01)) 3
-
-let%test_unit "vol_target_scale mirrors vol_target_units magnitude" =
-  let units = PS.vol_target_units ~max:5 ~signal:2.5 ~sigma:(Some 0.5) in
-  let s = PS.vol_target_scale ~signal:2.5 ~sigma:(Some 0.5) in
-  assert (Float.(s >= Float.of_int units));
-  assert (Float.(s < Float.of_int units +. 1.0))

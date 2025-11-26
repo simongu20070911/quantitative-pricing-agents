@@ -37,7 +37,6 @@ let volume_slices ~(params : Params.t) (bar : bar_1m) : float array =
         Array.map weights ~f:(fun w -> bar.volume *. (w /. total))
 
 let adjust_price ~(params : Params.t) ~side ~rng price =
-  let half_spread = Params.apply_tick params (params.spread_ticks /. 2.) in
   let slip_ticks =
     match params.slip_model with
     | Params.No_slip -> 0.0
@@ -45,7 +44,9 @@ let adjust_price ~(params : Params.t) ~side ~rng price =
     | Params.Prob_one_tick { prob } ->
         if Float.(Random.State.float rng 1.0 <= prob) then 1.0 else 0.0
   in
-  let slip = Params.apply_tick params slip_ticks in
+  let half_spread_ticks = params.spread_ticks /. 2.0 in
+  let effective_ticks = half_spread_ticks +. slip_ticks in
+  let slip = Params.apply_tick params effective_ticks in
   match side with
-  | Buy -> price +. half_spread +. slip
-  | Sell -> price -. half_spread -. slip
+  | Buy -> price +. slip
+  | Sell -> price -. slip

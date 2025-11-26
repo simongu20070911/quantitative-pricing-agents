@@ -2,7 +2,7 @@
 _build/
 *.install
 *.exe
-
+.venv/
 # dune/ocaml compiler outputs
 *.cmo
 *.cmi

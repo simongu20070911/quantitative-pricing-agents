@@ -22,6 +22,13 @@ let registry : pack list =
           let cfg = Vwap_revert_strategy.config_of_params params in
           Vwap_revert_strategy.pure_strategy cfg);
     };
+    {
+      id = Open_range_breakout_strategy.strategy_id;
+      specs = Open_range_breakout_strategy.parameter_specs;
+      build = (fun params ->
+          let cfg = Open_range_breakout_strategy.config_of_params params in
+          Open_range_breakout_strategy.pure_strategy cfg);
+    };
   ]
 
 let find id = List.find registry ~f:(fun s -> String.equal s.id id)

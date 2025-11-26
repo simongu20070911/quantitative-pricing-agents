@@ -8,11 +8,13 @@ val config_of_params : Parameters.value_map -> config
 val session_window : config -> int * int
 val qty : config -> float
 val cost : config -> Cost_model.config
+val exec : config -> Execution_params.t
 val with_cost : cost:Cost_model.config -> config -> config
 val with_s_entry : s_entry:float -> config -> config
 val with_z_exit : z_exit:float -> config -> config
 val with_session : start:int -> end_:int -> config -> config
 val with_qty : qty:float -> config -> config
+val with_exec : exec:Execution_params.t -> config -> config
 
 module Intent (_ : sig val cfg : config end) : Strategy_sig.V2
 

@@ -1,6 +1,7 @@
 open Core
 open Strategy_fast
 module Opt = Engine.Optimizer
+module Opt_shared = Engine.Optimizer_shared
 
 (* Job file schema (JSON):
    {
@@ -81,18 +82,21 @@ let json_to_job ~job_json =
     | _ -> None
   in
   let cache = job_json |> member "cache" |> to_bool_option |> Option.value ~default:false in
-  (strategy, data, search, objective, perm_reps, bootstrap_reps, robustness_bumps, cache, job_json |> member "params_override")
+  let shared_stream = job_json |> member "shared_stream" |> to_bool_option |> Option.value ~default:true in
+  let batch_size = job_json |> member "batch_size" |> to_int_option |> Option.value ~default:8 in
+  let restarts = job_json |> member "restarts" |> to_int_option |> Option.value ~default:1 in
+  (strategy, data, search, objective, perm_reps, bootstrap_reps, robustness_bumps, cache, shared_stream, batch_size, restarts, job_json |> member "params_override")
 
 let run_job ~job_file =
   let json = Yojson.Safe.from_file job_file in
-  let strategy_id, datafile, search, objective, perm_reps, bootstrap_reps, robustness_bumps, cache, params_override_json =
+  let strategy_id, datafile, search, objective, perm_reps, bootstrap_reps, robustness_bumps, cache, shared_stream, batch_size, restarts, params_override_json =
     json_to_job ~job_json:json
   in
   if not (Stdlib.Sys.file_exists datafile) then
     failwithf "data file %s not found" datafile ();
   let strat_pack = Strategy_registry.find_exn strategy_id in
   let guardrails = Guardrails.load ~strategy_id () |> Result.ok_or_failwith in
-  let job = {
+  let base_job = {
     Opt.strategy_id = strategy_id;
     specs = strat_pack.specs;
     search;
@@ -104,13 +108,39 @@ let run_job ~job_file =
     cache;
   } in
   let overrides = parse_overrides strat_pack.specs params_override_json in
-  let evaluate params =
-    let p = Map.fold overrides ~init:params ~f:(fun ~key ~data acc -> Map.set acc ~key ~data) in
-    let strategy = strat_pack.build p in
-    let res = Engine.Engine.run_pure strategy ~filename:datafile in
-    { Opt.params = p; score = 0.; trades = res.trades; daily_pnl = res.daily_pnl }
+  let apply_overrides params =
+    Map.fold overrides ~init:params ~f:(fun ~key ~data acc -> Map.set acc ~key ~data)
   in
-  let result = Opt.run job ~evaluate in
+  let to_shared_result (r : Opt.result) : Opt_shared.result =
+    { best = { params = r.best.params; score = r.best.score; trades = r.best.trades; daily_pnl = r.best.daily_pnl };
+      tested = r.tested;
+      rejected_guardrail = r.rejected_guardrail;
+      rejected_robustness = r.rejected_robustness;
+      cache_hits = r.cache_hits;
+      guardrails_hash = r.guardrails_hash; }
+  in
+  let result =
+    if shared_stream then
+      let job_shared = {
+        Opt_shared.base = base_job;
+        datafile;
+        batch_size;
+        restarts;
+        shared_stream = true;
+      } in
+      let strat_pack_overrides =
+        { strat_pack with build = (fun p -> strat_pack.build (apply_overrides p)) }
+      in
+      Opt_shared.run job_shared ~strat_pack:strat_pack_overrides
+    else
+      let evaluate params =
+        let p = apply_overrides params in
+        let strategy = strat_pack.build p in
+        let res = Engine.Engine.run_pure strategy ~filename:datafile in
+        { Opt.params = p; score = 0.; trades = res.trades; daily_pnl = res.daily_pnl }
+      in
+      Opt.run base_job ~evaluate |> to_shared_result
+  in
   let ts =
     Time_float.now ()
     |> Time_float.to_string_iso8601_basic ~zone:Time_float.Zone.utc
@@ -143,6 +173,9 @@ let run_job ~job_file =
       "rejected_robustness", `Int result.rejected_robustness;
       "cache_hits", `Int result.cache_hits;
       "guardrails_hash", `String result.guardrails_hash;
+      "shared_stream", `Bool shared_stream;
+      "batch_size", `Int batch_size;
+      "restarts", `Int restarts;
       "params", params_json;
       "perm_reps", (match perm_reps with Some r -> `Int r | None -> `Null);
       "bootstrap_reps", (match bootstrap_reps with Some r -> `Int r | None -> `Null);

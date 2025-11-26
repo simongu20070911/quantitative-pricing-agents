@@ -1,0 +1,7 @@
+(executable
+ (name multi_vwap_bench)
+ (modules multi_vwap_bench)
+ (public_name multi_vwap_bench)
+ (libraries core core_unix strategy_fast)
+ (preprocess (pps ppx_jane)))
+

@@ -11,34 +11,30 @@ module Trade = struct
     |> Trade_base.apply_costs ~qty cost
 end
 
-module Config = struct
-  let cost_params (defaults : Cost_model.config) : Parameters.t list =
-    [
-      Parameters.make ~name:"cost.slippage_roundtrip_ticks"
-        ~default:defaults.slippage_roundtrip_ticks ~bounds:(0., 3.)
-        ~description:"assumed round-trip slippage in ticks" ();
-      Parameters.make ~name:"cost.fee_per_contract"
-        ~default:defaults.fee_per_contract ~bounds:(0., 10.)
-        ~description:"exchange+broker fee per contract" ();
+  module Config = struct
+    let cost_params (defaults : Cost_model.config) : Parameters.t list =
+      [
+        Parameters.make ~name:"cost.fee_per_contract"
+          ~default:defaults.fee_per_contract ~bounds:(0., 10.)
+          ~description:"exchange+broker fee per contract" ();
       Parameters.make ~name:"cost.equity_base"
         ~default:(Option.value defaults.equity_base ~default:0.)
         ~bounds:(0., 5_000_000.)
         ~description:"account equity in USD for pct PnL; 0 => disabled" ();
     ]
 
-  let cost_of_params ~(defaults : Cost_model.config) (m : Parameters.value_map) : Cost_model.config =
-    let get name default = Map.find m name |> Option.value ~default in
-    let equity_base =
-      let eb = get "cost.equity_base" (Option.value defaults.equity_base ~default:0.) in
-      if Float.(eb <= 0.) then None else Some eb
-    in
-    {
-      tick_size = defaults.tick_size;
-      tick_value = defaults.tick_value;
-      slippage_roundtrip_ticks = get "cost.slippage_roundtrip_ticks" defaults.slippage_roundtrip_ticks;
-      fee_per_contract = get "cost.fee_per_contract" defaults.fee_per_contract;
-      equity_base;
-    }
+    let cost_of_params ~(defaults : Cost_model.config) (m : Parameters.value_map) : Cost_model.config =
+      let get name default = Map.find m name |> Option.value ~default in
+      let equity_base =
+        let eb = get "cost.equity_base" (Option.value defaults.equity_base ~default:0.) in
+        if Float.(eb <= 0.) then None else Some eb
+      in
+      {
+        tick_size = defaults.tick_size;
+        tick_value = defaults.tick_value;
+        fee_per_contract = get "cost.fee_per_contract" defaults.fee_per_contract;
+        equity_base;
+      }
 
   let session_params ~default_start ~default_end : Parameters.t list =
     [
@@ -83,7 +79,7 @@ end
 module Strategy_builder = struct
   let make_pure ~id ~env ?build_setups (module S : Strategy_sig.V2)
       : Engine_v2.pure_strategy =
-    { Engine_v2._id = id; env; build_setups; strategy = (module S) }
+    { Engine_types._id = id; env; build_setups; strategy = (module S) }
 end
 
 module Trade_common = struct
@@ -155,10 +151,6 @@ end
 module Env = struct
   let of_config ~session_start_min ~session_end_min ~qty ~(cost : Cost_model.config)
       ?exec () : Strategy_sig.env =
-    let exec =
-      match exec with
-      | Some e -> e
-      | None -> Execution_params.legacy ~tick_size:cost.tick_size
-    in
+    let exec = Option.value exec ~default:(Execution_params.default ~tick_size:cost.tick_size ()) in
     { Strategy_sig.session_start_min; session_end_min; qty; cost; exec }
 end

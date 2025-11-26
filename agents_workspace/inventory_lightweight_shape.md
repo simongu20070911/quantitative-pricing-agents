@@ -25,6 +25,7 @@ modules:
       - t
     provides_values:
       - load : Universe.t -> Date.t -> Date.t -> t
+    status: currently a stub, because....
 
 signatures:
   - name: Data_loader.S
@@ -52,6 +53,7 @@ functors:
       - MODEL: Model.S
       - PRICER: Pricer.S
     result_signature: Backtest.S
+    status: example: currently a stub, because...
 
 types:
   - name: Universe.t

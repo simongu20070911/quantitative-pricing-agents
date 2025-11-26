@@ -1,37 +1,22 @@
 open Core
-
-let ensure_dir dir =
-  try Core_unix.mkdir dir ~perm:0o755 with _ -> ()
-
-let run_python_plot ~trades_csv ~daily_csv ~outdir =
-  let script = Filename.concat "tools" "plot_trades.py" in
-  if not (Stdlib.Sys.file_exists script) then
-    eprintf "Python plotter not found at %s; skipping\n%!" script
-  else
-    let cmd =
-      Printf.sprintf "python3 %s --trades %s --daily %s --outdir %s"
-        script trades_csv daily_csv outdir
-    in
-    match Stdlib.Sys.command cmd with
-    | 0 -> ()
-    | c -> eprintf "Python plot command exited with code %d\n%!" c
-
-let plot dir (result : Strategy_fast.Engine.Engine.run_result) =
-  ensure_dir dir;
-  let open Strategy_fast.Plot.Plotter in
-  render_equity ~outfile:(Filename.concat dir "equity_trades.png") ~trades:result.trades;
-  render_daily_curve ~outfile:(Filename.concat dir "equity_daily.png") ~daily:result.daily_pnl;
-  let pnl = List.map result.trades ~f:(fun t -> t.pnl_R) |> Array.of_list in
-  render_histogram ~outfile:(Filename.concat dir "pnl_hist.png") ~values:pnl ~bins:40
+module EP = Strategy_fast.Engine.Execution_params
+module Cli = Strategy_fast.Cli_helpers
 
 let main ~slippage ~fees ~s_entry ~z_exit ?plot_dir ?export_trades ?export_daily ?plot_python filename =
   let open Strategy_fast.Strategies.Vwap_revert_strategy in
   let tuned_cost = { (cost default_config) with
-                     slippage_roundtrip_ticks = slippage;
                      fee_per_contract = fees; } in
+  let exec =
+    let base = exec default_config in
+    { base with
+      slip_model = EP.Constant_ticks (slippage /. 2.);
+      spread_ticks = 0.0;
+    }
+  in
   let cfg =
     default_config
     |> with_cost ~cost:tuned_cost
+    |> with_exec ~exec
     |> with_s_entry ~s_entry
     |> with_z_exit ~z_exit
   in
@@ -45,20 +30,9 @@ let main ~slippage ~fees ~s_entry ~z_exit ?plot_dir ?export_trades ?export_daily
   let stats = Strategy_fast.Summary.compute_stats ~daily_usd:result.daily_pnl_usd ~daily_pct:result.daily_pnl_pct result.trades result.daily_pnl in
   Strategy_fast.Summary.print_stats stats;
   Strategy_fast.Summary.print_sample_trades result.trades 10;
-  Option.iter export_trades ~f:(fun outfile ->
-      Strategy_fast.Summary.export_trades_csv ~outfile ~trades:result.trades);
-  Option.iter export_daily ~f:(fun outfile ->
-      Strategy_fast.Summary.export_daily_csv ~outfile ~daily:result.daily_pnl ~daily_usd:result.daily_pnl_usd ~daily_pct:result.daily_pnl_pct ());
-  Option.iter plot_dir ~f:(fun d -> plot d result);
-  (match plot_python with
-   | Some dir ->
-       ensure_dir dir;
-       let trades_csv = Filename.concat dir "trades.csv" in
-       let daily_csv  = Filename.concat dir "daily.csv" in
-       Strategy_fast.Summary.export_trades_csv ~outfile:trades_csv ~trades:result.trades;
-       Strategy_fast.Summary.export_daily_csv  ~outfile:daily_csv  ~daily:result.daily_pnl ~daily_usd:result.daily_pnl_usd ~daily_pct:result.daily_pnl_pct ();
-       run_python_plot ~trades_csv ~daily_csv ~outdir:dir
-   | None -> ())
+  Cli.apply_outputs
+    ~opts:(Cli.outputs ?plot_dir ?export_trades ?export_daily ?plot_python ())
+    ~result
 
 let () =
   let argv = Sys.get_argv () in

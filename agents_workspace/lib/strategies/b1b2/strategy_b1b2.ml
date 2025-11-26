@@ -24,20 +24,19 @@ let default_env =
   { SC.Tunables.session_start_min = rth_start_min;
     session_end_min = rth_end_min;
     qty = 1.0;
-    cost = {
-      tick_size = default_params.exec.tick_size;
-      tick_value = default_params.exec.tick_value;
-      slippage_roundtrip_ticks = 1.0;
-      fee_per_contract = 4.0;
-      equity_base = None;
-    }; }
+  cost = {
+    tick_size = default_params.exec.tick_size;
+    tick_value = default_params.exec.tick_value;
+    fee_per_contract = 4.0;
+    equity_base = None;
+  }; }
 
 let default_config = {
   session_start_min = default_env.session_start_min;
   session_end_min = default_env.session_end_min;
   qty = default_env.qty;
   cost = default_env.cost;
-  exec = Execution_params.default ~tick_size:default_env.cost.tick_size;
+  exec = Execution_params.default ~tick_size:default_env.cost.tick_size ();
   params = default_params;
 }
 
@@ -70,7 +69,7 @@ let config_of_params (m : Parameters.value_map) : config =
     session_end_min = env.session_end_min;
     qty = env.qty;
     cost;
-    exec = Execution_params.default ~tick_size:cost.tick_size;
+    exec = Execution_params.default ~tick_size:cost.tick_size ();
     params; }
 
 let session_window cfg = cfg.session_start_min, cfg.session_end_min
@@ -83,22 +82,6 @@ let with_qty ~qty cfg = { cfg with qty }
 let with_params ~params cfg = { cfg with params }
 let with_session ~start ~end_ cfg = { cfg with session_start_min = start; session_end_min = end_ }
 let with_exec ~exec cfg = { cfg with exec }
-
-let record_trade ~(cfg : config) ~(plan : trade_plan) ~(active : active_state)
-    ~(exit_ts : timestamp) ~(exit_price : float) ~(exit_qty:float) ~(reason : exit_reason) =
-  let meta =
-    SC.Trade_common.with_strategy strategy_id [
-      ("target_mult", Float.to_string plan.target_mult);
-      ("abr_prev", Float.to_string plan.abr_prev);
-      ("b1_range", Float.to_string plan.b1_range);
-      ("b2_follow",
-       match plan.b2_follow with Follow_good -> "good" | Follow_poor -> "poor");
-    ]
-  in
-  let qty = exit_qty in
-  SC.Trade.make ~qty ~r_pts:plan.r_pts cfg.cost plan.direction
-    ~entry_ts:active.entry_ts ~entry_px:active.entry_price
-    ~exit_ts ~exit_px:exit_price ~reason ~meta
 
 let downgrade_if_needed plan ~minute_of_day =
   if plan.downgrade_after_b2 && Float.(plan.target_mult = 2.0) && minute_of_day > plan.b2_end_minute then
@@ -171,48 +154,6 @@ module Intent (Cfg : sig val cfg : config end) : SS.V2 = struct
 
   let finalize_day _env state _last_bar =
     state, []
-end
-
-module Pure (Cfg : sig val cfg : config end) : SS.S = struct
-  module I = Intent(Cfg)
-
-  type state = {
-    intent_state : I.state;
-    book : OB.t;
-  }
-
-  let init setup_opt =
-    let intent_state = I.init setup_opt in
-    { intent_state; book = OB.empty () }
-
-  let mk_exec_config (env : SS.env) : EE.config =
-    let build_trade ~(plan : trade_plan) ~(active : active_state)
-        ~(exit_ts : timestamp) ~(exit_price : float)
-        ~(exit_qty:float) ~(exit_reason : exit_reason) : trade =
-      record_trade ~cfg:Cfg.cfg ~plan ~active ~exit_ts ~exit_price ~exit_qty
-        ~reason:exit_reason
-    in
-    { EE.cost = env.cost; exec = env.exec; build_trade }
-
-  let step env state (bar : bar_1m) =
-    let intent_state', cmds = I.step env state.intent_state bar in
-    let book_after_cmds = OB.apply_cmds state.book ~ts:bar.ts cmds in
-    let cfg = mk_exec_config env in
-    let book', trades = EE.step ~config:cfg ~book:book_after_cmds ~bar in
-    { intent_state = intent_state'; book = book' }, trades
-
-  let finalize_day env state last_bar =
-    let intent_state', cmds = I.finalize_day env state.intent_state last_bar in
-    let book_after_cmds =
-      match last_bar with
-      | None -> state.book
-      | Some lb -> OB.apply_cmds state.book ~ts:lb.ts cmds
-    in
-    let cfg = mk_exec_config env in
-    let book', trades =
-      EE.on_session_end ~config:cfg ~book:book_after_cmds ~last_bar
-    in
-    { intent_state = intent_state'; book = book' }, trades
 end
 
 let make_pure_strategy cfg =

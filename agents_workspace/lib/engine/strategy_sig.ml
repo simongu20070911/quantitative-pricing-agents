@@ -24,14 +24,6 @@ type order_cmd =
       meta : (string * string) list;
     }
 
-module type S = sig
-  type state
-
-  val init : setup option -> state
-  val step : env -> state -> bar_1m -> state * trade list
-  val finalize_day : env -> state -> bar_1m option -> state * trade list
-end
-
 module type V2 = sig
   type state
 

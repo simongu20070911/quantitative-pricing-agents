@@ -23,7 +23,7 @@ let step_order ~(cfg : config) ~(bar : bar_1m) (o : order)
   | (Filled | Cancelled), _ -> o, []
   | Working, Bracket plan ->
       let trade_state, trades =
-        TT.step_with_exec
+        TT.step
           ~exec:cfg.exec
           ~plan
           ~state:o.trade_state
@@ -125,9 +125,14 @@ let on_session_end ~config ~(book : Order_book.t) ~(last_bar : bar_1m option) =
         List.fold_map book.orders ~init:[] ~f:(fun acc o ->
             match o.status, o.trade_state, o.kind with
             | Working, Active a, Bracket plan ->
+                let exit_px =
+                  EM.adjust_price ~params:config.exec
+                    ~side:(exit_side plan.direction)
+                    ~rng:config.exec.rng_state lb.close
+                in
                 let trade =
                   config.build_trade ~plan ~active:a
-                    ~exit_ts:lb.ts ~exit_price:lb.close ~exit_qty:a.qty ~exit_reason:Eod_flat
+                    ~exit_ts:lb.ts ~exit_price:exit_px ~exit_qty:a.qty ~exit_reason:Eod_flat
                 in
                 let o' =
                   { o with

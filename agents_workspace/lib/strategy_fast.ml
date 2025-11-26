@@ -27,8 +27,6 @@ module Engine = struct
   module Engine = Engine_v2
   module Strategy_sig = Strategy_sig
   module Multi_engine = Multi_engine
-  module Policy_sig = Policy_sig
-  module Backtest = Backtest
   module Trade_transition = Trade_transition
   module Execution_params = Execution_params
   module Execution_model = Execution_model
@@ -36,15 +34,19 @@ module Engine = struct
   module Stat_tests = Stat_tests
   module Robustness = Robustness
   module Optimizer = Optimizer
+  module Optimizer_shared = Optimizer_shared
 end
 
 module Plot = struct
   module Plotter = Plotter
 end
 
+module Cli_helpers = Cli_helpers
+
 module Strategies = struct
   module Strategy_b1b2 = Strategy_b1b2
   module Vwap_revert_strategy = Vwap_revert_strategy
+  module Open_range_breakout_strategy = Open_range_breakout_strategy
   module B1b2_params = B1b2_params
   module Setup_builder_b1b2 = Setup_builder_b1b2
 end

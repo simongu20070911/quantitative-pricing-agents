@@ -1,0 +1,10 @@
+{
+  "strategy": "vwap_revert",
+  "data": "sample_es.csv",
+  "search": { "type": "grid", "steps": 1 },
+  "objective": "sharpe",
+  "batch_size": 1,
+  "restarts": 1,
+  "shared_stream": true,
+  "robustness": { "bumps": [] }
+}

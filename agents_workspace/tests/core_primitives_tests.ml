@@ -27,22 +27,12 @@ let%test_unit "vol_target_units floors, caps, and uses absolute signal" =
     (PS.vol_target_units ~max:2 ~signal:10.0 ~sigma:(Some 1.0))
     2
 
-let%test_unit "vol_target_scale mirrors vol_target_units behavior" =
-  [%test_eq: float] (PS.vol_target_scale ~signal:1.0 ~sigma:None) 0.0;
-  [%test_eq: float] (PS.vol_target_scale ~signal:5.0 ~sigma:(Some (-0.5))) 0.0;
-  [%test_eq: bool]
-    (approx
-       (PS.vol_target_scale ~signal:(-4.0) ~sigma:(Some 2.0))
-       2.0)
-    true
+(* Cost model and execution slippage ------------------------------------ *)
 
-(* Cost model ------------------------------------------------------------- *)
-
-let%test_unit "cost_model applies slippage, fees, and pct PnL" =
+let%test_unit "cost_model applies fees and pct PnL (slippage handled in execution)" =
   let cfg = {
     CM.tick_size = 0.25;
     tick_value = 12.5;
-    slippage_roundtrip_ticks = 2.0;
     fee_per_contract = 2.0;
     equity_base = Some 100_000.;
   } in
@@ -58,7 +48,6 @@ let%test_unit "cost_model applies slippage, fees, and pct PnL" =
   let dollars_per_point = cfg.tick_value /. cfg.tick_size in
   let expected_net_usd =
     (raw.pnl_pts *. dollars_per_point *. qty)
-    -. (cfg.slippage_roundtrip_ticks *. cfg.tick_value *. qty)
     -. (cfg.fee_per_contract *. qty)
   in
   assert (approx t.pnl_usd expected_net_usd);
@@ -69,11 +58,26 @@ let%test_unit "cost_model applies slippage, fees, and pct PnL" =
    | None -> assert false
    | Some pct -> assert (approx pct (expected_net_usd /. Option.value_exn cfg.equity_base)))
 
+let%test_unit "execution_model applies constant tick slippage per side" =
+  let module EM = Strategy_fast.Engine.Execution_model in
+  let module EP = Strategy_fast.Engine.Execution_params in
+  let params =
+    let base = EP.default ~tick_size:0.25 () in
+    { base with
+      slip_model = EP.Constant_ticks 1.0;
+      spread_ticks = 0.0;
+    }
+  in
+  let rng = EM.make_rng ~seed:42 () in
+  let buy_px = EM.adjust_price ~params ~side:EM.Buy ~rng 100.0 in
+  let sell_px = EM.adjust_price ~params ~side:EM.Sell ~rng 100.0 in
+  assert (approx buy_px 100.25);
+  assert (approx sell_px 99.75)
+
 let%test_unit "pct PnL is dropped when equity base is zero" =
   let cfg = {
     CM.tick_size = 0.25;
     tick_value = 12.5;
-    slippage_roundtrip_ticks = 0.0;
     fee_per_contract = 0.0;
     equity_base = Some 0.0;
   } in
@@ -90,7 +94,6 @@ let%test_unit "cost_model keeps original R when r_pts is nonpositive" =
   let cfg = {
     CM.tick_size = 0.25;
     tick_value = 12.5;
-    slippage_roundtrip_ticks = 0.0;
     fee_per_contract = 0.0;
     equity_base = None;
   } in

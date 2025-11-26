@@ -1,3 +1,5 @@
+(include_subdirs unqualified)
+
 (library
  (name strategy_fast_tests)
  (inline_tests)
