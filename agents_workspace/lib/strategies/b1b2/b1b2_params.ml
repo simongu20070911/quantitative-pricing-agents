@@ -42,10 +42,10 @@ module Setup = struct
       { name = "ibs_bear_max"; default = 0.31; bounds = (0., 1.); integer = fl_flag; tunable = true;
         description = "IBS threshold bearish";
         set = (fun p v -> { p with ibs_bear_max = v }) };
-      { name = "abr_window_n"; default = 8.; bounds = (4., 50.); integer = int_flag; tunable = false;
+      { name = "abr_window_n"; default = 8.; bounds = (4., 20.); integer = int_flag; tunable = true;
         description = "ABR rolling window length";
         set = (fun p v -> { p with abr_window_n = clamp_int ~min:1 ~max:120 v }) };
-      { name = "adr_window_n"; default = 21.; bounds = (4., 50.); integer = int_flag; tunable = false;
+      { name = "adr_window_n"; default = 21.; bounds = (16., 40.); integer = int_flag; tunable = true;
         description = "ADR rolling window length";
         set = (fun p v -> { p with adr_window_n = clamp_int ~min:1 ~max:120 v }) };
     ]

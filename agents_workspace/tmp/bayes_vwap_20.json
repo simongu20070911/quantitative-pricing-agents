@@ -1,0 +1,9 @@
+{
+  "strategy": "vwap_revert",
+  "data": "sample_es.csv",
+  "search": { "type": "bayes", "samples": 20, "seed": 1 },
+  "objective": "sharpe",
+  "batch_size": 3,
+  "shared_stream": true,
+  "robustness": { "bumps": [] }
+}

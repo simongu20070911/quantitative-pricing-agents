@@ -1,6 +1,11 @@
 open Core
 open Types
 
+let now_iso () =
+  Time_float.(now () |> to_string_iso8601_basic ~zone:Time_float.Zone.utc)
+
+let log_ts log msg = log (Printf.sprintf "%s %s" (now_iso ()) msg)
+
 module BC = Botorch_client
 
 type config = {
@@ -72,13 +77,14 @@ let bounds_of_specs (specs : Parameters.t list) =
         Some { BC.name = s.name; lower; upper; integer = s.integer; domain })
 
 let params_of_array (specs : Parameters.t list) (arr : float array) =
-  List.foldi specs ~init:String.Map.empty ~f:(fun i acc spec ->
-      if (not spec.Parameters.tunable) || spec.Parameters.fixed then acc
-      else
-        let raw = arr.(i) in
-        let v =
-          match spec.domain with
-          | Parameters.Categorical cats ->
+  let tunable_specs =
+    List.filter specs ~f:(fun s -> s.Parameters.tunable && not s.Parameters.fixed)
+  in
+  List.foldi tunable_specs ~init:String.Map.empty ~f:(fun i acc spec ->
+      let raw = arr.(i) in
+      let v =
+        match spec.domain with
+        | Parameters.Categorical cats ->
               let idx = Int.clamp_exn ~min:0 ~max:(List.length cats - 1) (Int.of_float raw) in
               Float.of_int idx
           | Parameters.Discrete vals ->
@@ -135,10 +141,16 @@ let run ?(log = fun _ -> ()) ~(strat_pack : Strategy_registry.pack)
   let initial_params =
     Opt_algos.latin_hypercube specs ~samples:init_samples ~seed:config.seed
   in
+  log_ts log
+    (Printf.sprintf
+       "botorch_kernel: warmup_start init_samples=%d shared_stream=%b batch_size=%d max_evals=%d"
+       init_samples config.shared_stream config.batch_size config.max_evals);
+  let warmup_t0 = Time_float.now () in
   let initial_evals =
     eval_batch ~strat_pack ~datafile ~objective:config.objective
       ~shared_stream:config.shared_stream initial_params
   in
+  let warmup_dur = Time_float.diff (Time_float.now ()) warmup_t0 |> Time_float.Span.to_sec in
   let x_data = ref (List.map initial_params ~f:(array_of_params specs)) in
   let y_data = ref (List.map initial_evals ~f:(fun e -> e.score)) in
   let tested = ref (List.length initial_evals) in
@@ -148,7 +160,9 @@ let run ?(log = fun _ -> ()) ~(strat_pack : Strategy_registry.pack)
     | None -> failwith "no initial evaluations produced"
   in
   let history = ref initial_evals in
-  log (Printf.sprintf "botorch_kernel: seeded with %d evals" !tested);
+  log_ts log
+    (Printf.sprintf "botorch_kernel: warmup_done tested=%d warmup_s=%.3f" !tested
+       warmup_dur);
   let bc_state =
     BC.update ?host:config.host ?port:config.port ~state:bc_state
       ~y_new:(Array.of_list !y_data) ()
@@ -158,38 +172,42 @@ let run ?(log = fun _ -> ()) ~(strat_pack : Strategy_registry.pack)
     if !tested >= config.max_evals then state
     else (
       incr iter;
-      log
+      log_ts log
         (Printf.sprintf
-           "botorch_kernel: iter %d, tested=%d/%d -> calling suggest" !iter
-           !tested config.max_evals);
+           "botorch_kernel: iter %d tested=%d/%d -> suggest" !iter !tested
+           config.max_evals);
       let x_mat = Array.of_list !x_data in
       let y_arr = Array.of_list !y_data in
+      let suggest_t0 = Time_float.now () in
       let suggested =
         BC.suggest ?host:config.host ?port:config.port ~state ~x:x_mat ~y:y_arr ()
       in
+      let suggest_dur = Time_float.diff (Time_float.now ()) suggest_t0 |> Time_float.Span.to_sec in
       let remaining = config.max_evals - !tested in
       let cand_with_region =
         List.zip_exn suggested.candidates suggested.region_ids
         |> Fn.flip List.take remaining
       in
       if List.is_empty cand_with_region then (
-        log
+        log_ts log
           (Printf.sprintf
-             "botorch_kernel: iter %d, suggest returned 0 candidates; stopping"
-             !iter);
+             "botorch_kernel: iter %d suggest returned 0 candidates; stopping (%.3fs)"
+             !iter suggest_dur);
         state)
       else
         let params_batch =
           List.map cand_with_region ~f:(fun (arr, _) -> params_of_array specs arr)
         in
-        log
+        log_ts log
           (Printf.sprintf
-             "botorch_kernel: iter %d, evaluating batch of %d candidates" !iter
-             (List.length params_batch));
+             "botorch_kernel: iter %d evaluating batch=%d suggest_s=%.3f" !iter
+             (List.length params_batch) suggest_dur);
+        let eval_t0 = Time_float.now () in
         let evals =
           eval_batch ~strat_pack ~datafile ~objective:config.objective
             ~shared_stream:config.shared_stream params_batch
         in
+        let eval_dur = Time_float.diff (Time_float.now ()) eval_t0 |> Time_float.Span.to_sec in
         let evals =
           List.map2_exn evals cand_with_region ~f:(fun e (_, rid) ->
               { e with region_id = Some rid })
@@ -199,17 +217,17 @@ let run ?(log = fun _ -> ()) ~(strat_pack : Strategy_registry.pack)
         y_data := !y_data @ y_new;
         tested := !tested + List.length evals;
         history := !history @ evals;
-        log
+        log_ts log
           (Printf.sprintf
-             "botorch_kernel: iter %d finished eval batch, tested=%d/%d" !iter
-             !tested config.max_evals);
+             "botorch_kernel: iter %d finished eval batch tested=%d/%d eval_s=%.3f"
+             !iter !tested config.max_evals eval_dur);
         (match max_by_score evals with
         | Some b when Float.(b.score > (!best).score) ->
             best := b;
-            log
+            log_ts log
               (Printf.sprintf
-                 "botorch_kernel: iter %d, new best %.4f after %d evals" !iter
-                 b.score !tested)
+                 "botorch_kernel: iter %d new_best=%.4f after %d evals"
+                 !iter b.score !tested)
         | _ -> ());
         let state' =
           BC.update ?host:config.host ?port:config.port ~state:suggested.state

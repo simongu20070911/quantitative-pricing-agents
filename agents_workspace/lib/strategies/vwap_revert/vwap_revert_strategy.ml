@@ -27,7 +27,7 @@ let defaults_env = {
   cost = {
     tick_size = 0.25;
     tick_value = 12.5;
-    fee_per_contract = 4.0;
+    fee_per_contract = 0.0;
     equity_base = None;
   };
 }

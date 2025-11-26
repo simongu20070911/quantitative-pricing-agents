@@ -15,12 +15,14 @@ end
     let cost_params (defaults : Cost_model.config) : Parameters.t list =
       [
         Parameters.make ~name:"cost.fee_per_contract"
-          ~default:defaults.fee_per_contract ~bounds:(0., 10.)
-          ~description:"exchange+broker fee per contract" ();
+          ~default:defaults.fee_per_contract ~bounds:(defaults.fee_per_contract, defaults.fee_per_contract)
+          ~fixed:true ~tunable:false
+          ~description:"exchange+broker fee per contract (fixed)" ();
       Parameters.make ~name:"cost.equity_base"
         ~default:(Option.value defaults.equity_base ~default:0.)
-        ~bounds:(0., 5_000_000.)
-        ~description:"account equity in USD for pct PnL; 0 => disabled" ();
+        ~bounds:(0., 0.)
+        ~fixed:true ~tunable:false
+        ~description:"account equity in USD for pct PnL; fixed/disabled" ();
     ]
 
     let cost_of_params ~(defaults : Cost_model.config) (m : Parameters.value_map) : Cost_model.config =
@@ -36,14 +38,14 @@ end
         equity_base;
       }
 
-  let session_params ~default_start ~default_end : Parameters.t list =
-    [
-      Parameters.make ~name:"session_start_min" ~default:(Float.of_int default_start)
-        ~bounds:(0., 24. *. 60.) ~integer:true
-        ~description:"session start minute-of-day (ET)" ();
+    let session_params ~default_start ~default_end : Parameters.t list =
+      [
+        Parameters.make ~name:"session_start_min" ~default:(Float.of_int default_start)
+          ~bounds:(Float.of_int default_start, Float.of_int default_start) ~integer:true ~fixed:true ~tunable:false
+          ~description:"session start minute-of-day (ET) (fixed)" ();
       Parameters.make ~name:"session_end_min" ~default:(Float.of_int default_end)
-        ~bounds:(0., 24. *. 60.) ~integer:true
-        ~description:"session end minute-of-day (ET)" ();
+        ~bounds:(Float.of_int default_end, Float.of_int default_end) ~integer:true ~fixed:true ~tunable:false
+        ~description:"session end minute-of-day (ET) (fixed)" ();
     ]
 
   let session_of_params ~defaults:(d_start, d_end) (m : Parameters.value_map) : int * int =
@@ -94,12 +96,13 @@ module Tunables = struct
     cost : Cost_model.config;
   }
 
-  let env_specs ~defaults =
-    Config.session_params ~default_start:defaults.session_start_min
-      ~default_end:defaults.session_end_min
+    let env_specs ~defaults =
+      Config.session_params ~default_start:defaults.session_start_min
+        ~default_end:defaults.session_end_min
     @ [
-        Parameters.make ~name:"qty" ~default:defaults.qty ~bounds:(0.1, 20.)
-          ~description:"contracts per trade" ();
+        Parameters.make ~name:"qty" ~default:defaults.qty ~bounds:(defaults.qty, defaults.qty)
+          ~fixed:true ~tunable:false
+          ~description:"contracts per trade (fixed)" ();
       ]
     @ Config.cost_params defaults.cost
 

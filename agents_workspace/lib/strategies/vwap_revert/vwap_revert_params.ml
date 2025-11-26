@@ -43,8 +43,8 @@ let param_table : field list =
     { name = "stop_ticks"; default = 6.0; bounds = (1., 30.); integer = fl; tunable = true;
       description = "hard stop distance in ticks";
       set = (fun p v -> { p with stop_ticks = v }) };
-    { name = "max_units"; default = 3.; bounds = (1., 10.); integer = int; tunable = true;
-      description = "cap on volatility-targeted units";
+    { name = "max_units"; default = 3.; bounds = (1., 10.); integer = int; tunable = false;
+      description = "cap on volatility-targeted units (fixed)";
       set = (fun p v -> { p with max_units = clamp_int ~min:1 ~max:100 v }) };
   ]
 

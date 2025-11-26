@@ -1,0 +1,9 @@
+{
+  "strategy": "b1b2",
+  "data": "/Users/simongu/Documents/Library_QPA/QPA/es.c.0-20100606-20251116.et.ohlcv-1m.csv",
+  "search": { "type": "bayes", "samples": 500, "seed": 42 },
+  "objective": "sharpe",
+  "batch_size": 4,
+  "shared_stream": true,
+  "robustness": { "bumps": [] }
+}

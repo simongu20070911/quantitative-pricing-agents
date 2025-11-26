@@ -1,0 +1,9 @@
+{
+  "strategy": "b1b2",
+  "data": "sample_es.csv",
+  "search": { "type": "bayes", "samples": 40, "seed": 1 },
+  "objective": "sharpe",
+  "batch_size": 6,
+  "shared_stream": true,
+  "robustness": { "bumps": [] }
+}

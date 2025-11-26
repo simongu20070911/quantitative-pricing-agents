@@ -31,3 +31,17 @@
  (public_name orb30)
  (libraries core core_unix strategy_fast)
  (preprocess (pps ppx_jane)))
+
+(executable
+ (name multi_vwap_bench)
+ (modules multi_vwap_bench)
+ (public_name multi_vwap_bench)
+ (libraries core core_unix strategy_fast)
+ (preprocess (pps ppx_jane)))
+
+(executable
+ (name vwap_lhs_probe)
+ (modules vwap_lhs_probe)
+ (public_name vwap_lhs_probe)
+ (libraries core strategy_fast yojson)
+ (preprocess (pps ppx_jane)))

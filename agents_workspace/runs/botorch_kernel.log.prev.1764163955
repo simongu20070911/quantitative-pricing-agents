@@ -1,0 +1,2 @@
+2025-11-26T13:27:40.058970Z 2025-11-26T13:27:40.058959Z botorch_kernel: warmup_start init_samples=20 shared_stream=true batch_size=3 max_evals=20
+2025-11-26T13:30:51.624772Z 2025-11-26T13:30:51.624743Z botorch_kernel: warmup_start init_samples=20 shared_stream=true batch_size=3 max_evals=20
