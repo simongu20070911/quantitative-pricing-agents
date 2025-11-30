@@ -214,38 +214,84 @@ module Overnight = struct
   let set_prev_close t ~close = t.prev_close_rth <- Some close
 end
 
+module Ema = struct
+  type t = {
+    mutable value : float option;
+    mutable prev  : float option;
+    alpha         : float;
+  }
+
+  let create ~period =
+    let alpha = 2. /. Float.of_int (period + 1) in
+    { value = None; prev = None; alpha }
+
+  let update t ~price =
+    match t.value with
+    | None ->
+        t.prev <- None;
+        t.value <- Some price
+    | Some v ->
+        t.prev <- Some v;
+        let v' = v +. t.alpha *. (price -. v) in
+        t.value <- Some v'
+
+  let value t = t.value
+
+  let slope t =
+    match t.value, t.prev with
+    | Some v, Some p -> Some (v -. p)
+    | _ -> None
+end
+
 type state = {
   mutable current_date : Date.t option;
   mutable last_close   : float option;
+  mutable last_minute_of_day : int option;
   vwap     : Vwap.t;
   rv       : Rv.t;
   ofi      : Ofi.t;
   trend    : Trend.t;
   overnight: Overnight.t;
+  ema20    : Ema.t;
 }
 
+(** Coarse session phase for intraday context. *)
+type session_phase =
+  | Pre_rth
+  | Rth_open
+  | Rth_mid
+  | Rth_late
+  | Post_rth
+
 type snapshot = {
-  vwap       : float option;
-  z_vwap     : float option;
-  ofi_short  : float option;
-  ofi_long   : float option;
-  rv10       : float option;
-  rv60       : float option;
-  rv_ratio   : float option;
-  trend      : float option;
-  gap        : float option;
-  dist_onh   : float option;
-  dist_onl   : float option;
+  vwap          : float option;
+  z_vwap        : float option;
+  ofi_short     : float option;
+  ofi_long      : float option;
+  rv10          : float option;
+  rv60          : float option;
+  rv_ratio      : float option;
+  trend         : float option;
+  gap           : float option;
+  dist_onh      : float option;
+  dist_onl      : float option;
+  minute_of_day : int option;
+  session_phase : session_phase option;
+  ema20         : float option;
+  dist_ema20    : float option;
+  ema20_slope   : float option;
 }
 
 let create () =
   { current_date = None;
     last_close   = None;
+    last_minute_of_day = None;
     vwap     = Vwap.create ();
     rv       = Rv.create ();
     ofi      = Ofi.create ();
     trend    = Trend.create ();
     overnight= Overnight.create ();
+    ema20    = Ema.create ~period:20;
   }
 
 let clear_intraday_state (s : state) =
@@ -277,6 +323,7 @@ let update s (bar : bar_1m) : state =
   let { ts = { date; minute_of_day }; open_ = _; high; low; close; volume } = bar in
 
   update_date_if_needed s date;
+  s.last_minute_of_day <- Some minute_of_day;
 
   (* Overnight tracking before RTH *)
   if minute_of_day < rth_start_min then begin
@@ -291,6 +338,8 @@ let update s (bar : bar_1m) : state =
 
   (* VWAP accumulation *)
   Vwap.update s.vwap ~close ~volume;
+  (* EMA20 on close *)
+  Ema.update s.ema20 ~price:close;
 
   (* 1m return using previous close *)
   (match s.last_close with
@@ -340,6 +389,32 @@ let snapshot (s : state) : snapshot =
     | Some close, Some rv -> Trend.value s.trend ~rv60:rv ~last_close:close
     | _ -> None
   in
+  let ema20 = Ema.value s.ema20 in
+  let dist_ema20 =
+    match s.last_close, ema20 with
+    | Some c, Some e -> Some (c -. e)
+    | _ -> None
+  in
+  let ema20_slope = Ema.slope s.ema20 in
+  let minute_of_day = s.last_minute_of_day in
+  let session_phase =
+    match minute_of_day with
+    | None -> None
+    | Some m ->
+      let phase =
+        if m < rth_start_min then `Pre
+        else if m <= rth_start_min + 60 then `Open
+        else if m < rth_end_min - 60 then `Mid
+        else if m <= rth_end_min then `Late
+        else `Post
+      in
+      Some (match phase with
+        | `Pre  -> Pre_rth
+        | `Open -> Rth_open
+        | `Mid  -> Rth_mid
+        | `Late -> Rth_late
+        | `Post -> Post_rth)
+  in
   { vwap = s.vwap.vwap;
     z_vwap;
     ofi_short;
@@ -350,4 +425,10 @@ let snapshot (s : state) : snapshot =
     trend;
     gap = s.overnight.gap;
     dist_onh;
-    dist_onl; }
+    dist_onl;
+    minute_of_day;
+    session_phase;
+    ema20;
+    dist_ema20;
+    ema20_slope;
+  }

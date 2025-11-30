@@ -23,6 +23,13 @@ type run_result = {
   daily_pnl_pct : (Date.t * float) list;
 }
 
+type runner = {
+  strat : EV2.pure_strategy;
+  setups : setup Date.Table.t;
+  streamer : Engine_types.setup_stream option;
+  runner : Engine_runner.t;
+}
+
 module type BAR_STREAM = sig
   val iter : f:(bar_1m -> unit) -> unit
 end
@@ -77,13 +84,78 @@ let run_shared (strategies : EV2.pure_strategy list) ~(filename : string)
   let module Csv_stream = struct
     let iter ~f = Csv_parser.iter_bars filename ~f
   end in
-  let setups_cache : setup Date.Table.t String.Table.t = String.Table.create () in
-  let make_setups (strat : EV2.pure_strategy) =
-    match strat.build_setups with
-    | None -> Date.Table.create ()
-    | Some f ->
-        Hashtbl.find_or_add setups_cache strat._id ~default:(fun () -> f filename)
+  (* If any strategy offers streaming setup construction, keep everything in a
+     single-pass stream; otherwise prebuild setups once and reuse. *)
+  let uses_streaming =
+    List.exists strategies ~f:(fun s ->
+        let open Engine_types in
+        Option.is_some s.build_setups_stream)
   in
-  run_shared_with_stream ~stream:(module Csv_stream) ~make_setups strategies
+
+  if not uses_streaming then (
+    let setups_cache : setup Date.Table.t String.Table.t = String.Table.create () in
+    let make_setups (strat : EV2.pure_strategy) =
+      match strat.build_setups with
+      | None -> Date.Table.create ()
+      | Some f ->
+          Hashtbl.find_or_add setups_cache strat._id ~default:(fun () -> f filename)
+    in
+    run_shared_with_stream ~stream:(module Csv_stream) ~make_setups strategies)
+  else (
+    let module Stream = (val (module Csv_stream) : BAR_STREAM) in
+
+    let mk_runner strat : runner =
+      let open Engine_types in
+      let streamer = Option.map strat.build_setups_stream ~f:(fun mk -> mk ()) in
+      let setups =
+        match streamer, strat.build_setups with
+        | Some _, _ -> Date.Table.create ()
+        | None, Some f -> f filename
+        | None, None -> Date.Table.create ()
+      in
+      { strat; setups; streamer; runner = Engine_runner.create strat ~setups }
+    in
+
+    let runners = List.map strategies ~f:mk_runner in
+
+    debug_log
+      (Printf.sprintf "multi_engine: start shared_stream strategies=%d"
+         (List.length strategies));
+    let t0 = Time_float.now () in
+    let count = ref 0 in
+
+    Stream.iter ~f:(fun bar ->
+        incr count;
+        if Int.( !count % 1000 = 0 ) then
+          debug_log (Printf.sprintf "multi_engine: processed %d bars" !count);
+
+        List.iter runners ~f:(fun r ->
+            (match r.streamer with
+             | None -> ()
+             | Some streamer ->
+                 (match streamer.on_bar bar with
+                  | None -> ()
+                  | Some setup ->
+                      Hashtbl.set r.setups ~key:setup.date ~data:setup));
+            ignore (Engine_runner.step r.runner bar)));
+
+    let dur = Time_float.diff (Time_float.now ()) t0 |> Time_float.Span.to_sec in
+    debug_log
+      (Printf.sprintf "multi_engine: done bars=%d dur_s=%.3f" !count dur);
+
+    List.iter runners ~f:(fun r ->
+        Option.iter r.streamer ~f:(fun s -> s.finalize ());
+        Engine_runner.finalize_stream r.runner);
+
+    List.map runners ~f:(fun r ->
+        let res = Engine_runner.result r.runner in
+        {
+          strategy_id = r.strat._id;
+          setups = res.setups;
+          trades = res.trades;
+          daily_pnl = res.daily_pnl;
+          daily_pnl_usd = res.daily_pnl_usd;
+          daily_pnl_pct = res.daily_pnl_pct;
+        }))
 
 let run_shared_pure = run_shared

@@ -11,13 +11,14 @@ module Trade = struct
     |> Trade_base.apply_costs ~qty cost
 end
 
-  module Config = struct
-    let cost_params (defaults : Cost_model.config) : Parameters.t list =
-      [
-        Parameters.make ~name:"cost.fee_per_contract"
-          ~default:defaults.fee_per_contract ~bounds:(defaults.fee_per_contract, defaults.fee_per_contract)
-          ~fixed:true ~tunable:false
-          ~description:"exchange+broker fee per contract (fixed)" ();
+module Config = struct
+  let cost_params (defaults : Cost_model.config) : Parameters.t list =
+    [
+      Parameters.make ~name:"cost.fee_per_contract"
+        ~default:defaults.fee_per_contract
+        ~bounds:(defaults.fee_per_contract, defaults.fee_per_contract)
+        ~fixed:true ~tunable:false
+        ~description:"exchange+broker fee per contract (fixed)" ();
       Parameters.make ~name:"cost.equity_base"
         ~default:(Option.value defaults.equity_base ~default:0.)
         ~bounds:(0., 0.)
@@ -25,30 +26,34 @@ end
         ~description:"account equity in USD for pct PnL; fixed/disabled" ();
     ]
 
-    let cost_of_params ~(defaults : Cost_model.config) (m : Parameters.value_map) : Cost_model.config =
-      let get name default = Map.find m name |> Option.value ~default in
-      let equity_base =
-        let eb = get "cost.equity_base" (Option.value defaults.equity_base ~default:0.) in
-        if Float.(eb <= 0.) then None else Some eb
-      in
-      {
-        tick_size = defaults.tick_size;
-        tick_value = defaults.tick_value;
-        fee_per_contract = get "cost.fee_per_contract" defaults.fee_per_contract;
-        equity_base;
-      }
+  let cost_of_params ~(defaults : Cost_model.config) (m : Parameters.value_map)
+      : Cost_model.config =
+    let get name default = Map.find m name |> Option.value ~default in
+    let equity_base =
+      let eb = get "cost.equity_base" (Option.value defaults.equity_base ~default:0.) in
+      if Float.(eb <= 0.) then None else Some eb
+    in
+    {
+      tick_size = defaults.tick_size;
+      tick_value = defaults.tick_value;
+      fee_per_contract = get "cost.fee_per_contract" defaults.fee_per_contract;
+      equity_base;
+    }
 
-    let session_params ~default_start ~default_end : Parameters.t list =
-      [
-        Parameters.make ~name:"session_start_min" ~default:(Float.of_int default_start)
-          ~bounds:(Float.of_int default_start, Float.of_int default_start) ~integer:true ~fixed:true ~tunable:false
-          ~description:"session start minute-of-day (ET) (fixed)" ();
+  let session_params ~default_start ~default_end : Parameters.t list =
+    [
+      Parameters.make ~name:"session_start_min" ~default:(Float.of_int default_start)
+        ~bounds:(Float.of_int default_start, Float.of_int default_start)
+        ~integer:true ~fixed:true ~tunable:false
+        ~description:"session start minute-of-day (ET) (fixed)" ();
       Parameters.make ~name:"session_end_min" ~default:(Float.of_int default_end)
-        ~bounds:(Float.of_int default_end, Float.of_int default_end) ~integer:true ~fixed:true ~tunable:false
+        ~bounds:(Float.of_int default_end, Float.of_int default_end)
+        ~integer:true ~fixed:true ~tunable:false
         ~description:"session end minute-of-day (ET) (fixed)" ();
     ]
 
-  let session_of_params ~defaults:(d_start, d_end) (m : Parameters.value_map) : int * int =
+  let session_of_params ~defaults:(d_start, d_end) (m : Parameters.value_map)
+      : int * int =
     let get name default = Map.find m name |> Option.value ~default in
     let ss = get "session_start_min" (Float.of_int d_start) |> Int.of_float in
     let se = get "session_end_min" (Float.of_int d_end) |> Int.of_float in
@@ -79,9 +84,13 @@ module Setups = struct
 end
 
 module Strategy_builder = struct
-  let make_pure ~id ~env ?build_setups (module S : Strategy_sig.V2)
+  let make_pure ~id ~env ?build_setups ?build_setups_stream (module S : Strategy_sig.V2)
       : Engine_v2.pure_strategy =
-    { Engine_types._id = id; env; build_setups; strategy = (module S) }
+    { Engine_types._id = id;
+      env;
+      build_setups;
+      build_setups_stream;
+      strategy = (module S) }
 end
 
 module Trade_common = struct

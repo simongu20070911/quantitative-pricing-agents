@@ -14,7 +14,9 @@ type config = {
   max_evals : int;
   init_samples : int option;
   shared_stream : bool;
+  min_trades : int;
   objective : Optimizer.objective;
+  (* penalize low-trade configs inline to steer the model *)
   seed : int;
   host : string option;
   port : int option;
@@ -35,28 +37,120 @@ type result = {
   state : BC.state;
 }
 
-let metric_of_objective (objective : Optimizer.objective) (trades : trade list) =
+let year_sharpe_score ~lambda ~min_days ~trades_count (daily : (Date.t * float) list) =
+  let target_years = 3. in
+  let target_days = 200. in
+  let shrink_n = min_days in
+  let per_year = Int.Table.create () in
+  List.iter daily ~f:(fun (d, pnl) -> Hashtbl.add_multi per_year ~key:(Date.year d) ~data:pnl);
+  let total_days = Float.of_int (List.length daily) in
+  let sharpes, valid_years =
+    Hashtbl.fold per_year ~init:([], 0) ~f:(fun ~key:_ ~data (acc, vy) ->
+        let n = List.length data in
+        let len = Float.of_int (n + shrink_n) in
+        let sum = List.sum (module Float) data ~f:Fun.id in
+        let mean = sum /. len in
+        let sumsq =
+          List.sum (module Float) data ~f:(fun x -> (x -. mean) ** 2.)
+          +. Float.of_int shrink_n *. (mean ** 2.)
+        in
+        let var = sumsq /. len in
+        let sharpe = if Float.(var = 0.) then 0. else mean /. Float.sqrt var in
+        sharpe :: acc, (if n > 0 then vy + 1 else vy))
+  in
+  let coverage =
+    let year_cov = Float.min 1. (Float.of_int valid_years /. target_years) in
+    let day_cov = Float.min 1. (total_days /. target_days) in
+    year_cov *. day_cov
+  in
+  if trades_count = 0 then -5.
+  else
+    match sharpes with
+    | [] -> -5.
+    | xs ->
+        let len = Float.of_int (List.length xs) in
+        let mean = List.sum (module Float) xs ~f:Fun.id /. len in
+        let var = List.sum (module Float) xs ~f:(fun x -> (x -. mean) ** 2.) /. len in
+        let std = Float.sqrt var in
+        let raw = mean -. (lambda *. std) in
+        if Float.(coverage = 0.) then -5. else coverage *. raw
+
+let trade_penalty ~min_trades trades_count score =
+  if trades_count >= min_trades then score
+  else
+    let shortfall = Float.of_int (min_trades - trades_count) in
+    score -. (1000. *. shortfall)
+
+let metric_of_objective (objective : Optimizer.objective) ~(min_trades:int) ~(trades : trade list) ~(daily : (Date.t * float) list) =
+  let trades_count = List.length trades in
   match objective with
   | Optimizer.Custom f -> f trades
   | Optimizer.Hit_rate ->
-      if List.is_empty trades then 0.
+      if List.is_empty trades then trade_penalty ~min_trades trades_count 0.
       else
         let wins = List.count trades ~f:(fun t -> Float.(t.pnl_R > 0.)) in
-        Float.of_int wins /. Float.of_int (List.length trades)
+        let base = Float.of_int wins /. Float.of_int trades_count in
+        trade_penalty ~min_trades trades_count base
   | Optimizer.Mean_pnl ->
-      List.sum (module Float) trades ~f:(fun t -> t.pnl_R)
-      /. Float.max 1. (Float.of_int (List.length trades))
+      let base =
+        List.sum (module Float) trades ~f:(fun t -> t.pnl_R)
+        /. Float.max 1. (Float.of_int trades_count)
+      in
+      trade_penalty ~min_trades trades_count base
   | Optimizer.Sharpe ->
       let pnls = List.map trades ~f:(fun t -> t.pnl_R) in
       (match pnls with
-      | [] -> 0.
+      | [] -> trade_penalty ~min_trades trades_count 0.
       | _ ->
           let len = Float.of_int (List.length pnls) in
           let mean = List.sum (module Float) pnls ~f:Fun.id /. len in
           let var =
             List.sum (module Float) pnls ~f:(fun x -> (x -. mean) ** 2.) /. len
           in
-          if Float.(var = 0.) then 0. else mean /. Float.sqrt var)
+          let base = if Float.(var = 0.) then 0. else mean /. Float.sqrt var in
+          trade_penalty ~min_trades trades_count base)
+  | Optimizer.Year_sharpe { lambda; min_days } ->
+      let base = year_sharpe_score ~lambda ~min_days ~trades_count:trades_count daily in
+      trade_penalty ~min_trades trades_count base
+  | Optimizer.Simon_ratio { lambda } ->
+      let rec loop equity logs peaks mdd = function
+        | [] -> logs, mdd
+        | (_, pnl) :: tl ->
+            let r = pnl /. equity in
+            let eq' = equity *. (1. +. r) in
+            if Float.(eq' <= 1e-9) then logs @ [Float.log 1e-9], 1.0
+            else
+              let logs' = (Float.log (1. +. r)) :: logs in
+              let peak' = Float.max (List.hd peaks |> Option.value ~default:eq') eq' in
+              let dd = (peak' -. eq') /. peak' in
+              let mdd' = Float.max mdd dd in
+              loop eq' logs' (peak' :: peaks) mdd' tl
+      in
+      let logs, mdd = loop 1. [] [] 0. daily in
+      let t = Float.of_int (List.length logs) in
+      let base =
+        if Float.(t = 0.) then -5.
+        else
+          let g = List.sum (module Float) logs ~f:Fun.id /. t in
+          g -. (lambda *. mdd)
+      in
+      trade_penalty ~min_trades trades_count base
+  | Optimizer.Mean_trade_lcb { confidence } ->
+      let pnls = List.map trades ~f:(fun t -> t.pnl_R) |> Array.of_list in
+      let n = Array.length pnls in
+      let base =
+        if n < 2 then 0.
+        else
+          let mean = Owl_base_stats.mean pnls in
+          let std = Owl_base_stats.std pnls in
+          if Float.(std = 0.) then 0.
+          else
+            let se = std /. Float.sqrt (Float.of_int n) in
+            let df = Float.of_int (n - 1) in
+            let tcrit = Optimizer.t_critical ~p:confidence ~df in
+            mean -. (tcrit *. se)
+      in
+      trade_penalty ~min_trades trades_count base
 
 let bounds_of_specs (specs : Parameters.t list) =
   List.filter_map specs ~f:(fun s ->
@@ -106,7 +200,7 @@ let array_of_params (specs : Parameters.t list) (p : Parameters.value_map) =
   |> Array.of_list
 
 let eval_batch ~(strat_pack : Strategy_registry.pack) ~(datafile : string)
-    ~(objective : Optimizer.objective) ~(shared_stream : bool)
+    ~(objective : Optimizer.objective) ~(min_trades:int) ~(shared_stream : bool)
     (params_list : Parameters.value_map list) : eval list =
   let strategies = List.map params_list ~f:strat_pack.build in
   let results =
@@ -116,13 +210,13 @@ let eval_batch ~(strat_pack : Strategy_registry.pack) ~(datafile : string)
       Multi_engine.run_all_pure strategies ~filename:datafile
   in
   List.map3_exn params_list strategies results ~f:(fun params _ res ->
-      let score = metric_of_objective objective res.Multi_engine.trades in
+      let score = metric_of_objective objective ~min_trades ~trades:res.Multi_engine.trades ~daily:res.daily_pnl in
       { params; score; trades = res.trades; daily_pnl = res.daily_pnl; region_id = None })
 
 let max_by_score (xs : eval list) =
   List.max_elt xs ~compare:(fun a b -> Float.compare a.score b.score)
 
-let run ?(log = fun _ -> ()) ~(strat_pack : Strategy_registry.pack)
+let run ?(log = fun _ -> ()) ?on_new_best ~(strat_pack : Strategy_registry.pack)
     ~(datafile : string) ~(config : config) () : result =
   let specs = strat_pack.specs in
   let bounds = bounds_of_specs specs in
@@ -147,7 +241,7 @@ let run ?(log = fun _ -> ()) ~(strat_pack : Strategy_registry.pack)
        init_samples config.shared_stream config.batch_size config.max_evals);
   let warmup_t0 = Time_float.now () in
   let initial_evals =
-    eval_batch ~strat_pack ~datafile ~objective:config.objective
+    eval_batch ~strat_pack ~datafile ~objective:config.objective ~min_trades:config.min_trades
       ~shared_stream:config.shared_stream initial_params
   in
   let warmup_dur = Time_float.diff (Time_float.now ()) warmup_t0 |> Time_float.Span.to_sec in
@@ -156,7 +250,9 @@ let run ?(log = fun _ -> ()) ~(strat_pack : Strategy_registry.pack)
   let tested = ref (List.length initial_evals) in
   let best =
     match max_by_score initial_evals with
-    | Some b -> ref b
+    | Some b ->
+        Option.iter on_new_best ~f:(fun f -> f ~iter:0 b);
+        ref b
     | None -> failwith "no initial evaluations produced"
   in
   let history = ref initial_evals in
@@ -205,10 +301,10 @@ let run ?(log = fun _ -> ()) ~(strat_pack : Strategy_registry.pack)
         let eval_t0 = Time_float.now () in
         let evals =
           eval_batch ~strat_pack ~datafile ~objective:config.objective
-            ~shared_stream:config.shared_stream params_batch
+            ~min_trades:config.min_trades ~shared_stream:config.shared_stream params_batch
         in
         let eval_dur = Time_float.diff (Time_float.now ()) eval_t0 |> Time_float.Span.to_sec in
-        let evals =
+       let evals =
           List.map2_exn evals cand_with_region ~f:(fun e (_, rid) ->
               { e with region_id = Some rid })
         in
@@ -224,6 +320,7 @@ let run ?(log = fun _ -> ()) ~(strat_pack : Strategy_registry.pack)
         (match max_by_score evals with
         | Some b when Float.(b.score > (!best).score) ->
             best := b;
+            Option.iter on_new_best ~f:(fun f -> f ~iter:!iter b);
             log_ts log
               (Printf.sprintf
                  "botorch_kernel: iter %d new_best=%.4f after %d evals"

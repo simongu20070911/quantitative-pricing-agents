@@ -4,6 +4,9 @@ type objective =
   | Sharpe
   | Mean_pnl
   | Hit_rate
+  | Year_sharpe of { lambda : float; min_days : int }
+  | Simon_ratio of { lambda : float }
+  | Mean_trade_lcb of { confidence : float } (* one-sided lower conf bound on mean trade pnl_R *)
   | Custom of (Types.trade list -> float)
 
 type search =
@@ -44,3 +47,5 @@ val run :
   job ->
   evaluate:(Parameters.value_map -> candidate) ->
   result
+
+val t_critical : p:float -> df:float -> float

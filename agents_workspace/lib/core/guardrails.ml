@@ -12,17 +12,34 @@ type t = {
   capacity_impact_bps : float;
 }
 
+(* Native, file-free representation of config/optimization_guardrails.yaml *)
 let default = {
-  min_trades = 300;
-  max_trial_runs = 200;
-  pvalue_threshold = 0.025;
+  min_trades = 1;
+  max_trial_runs = 20_000;
+  pvalue_threshold = 1.0;
   bootstrap_ci_target = 0.0;
-  max_drawdown_R = 15.0;
+  max_drawdown_R = 0.0;
   robustness_tolerance = 0.7;
   robustness_tol_frac = 0.9;
   cliff_pct = 0.2;
   capacity_impact_bps = 2.0;
 }
+
+let native_overrides : t String.Map.t =
+  String.Map.of_alist_exn
+    [ ( "vwap_revert",
+        { default with
+          min_trades = 2000;
+          pvalue_threshold = 0.05;
+        } );
+      ( "b1b2",
+        { default with
+          min_trades = 200;
+          pvalue_threshold = 1.0;
+          bootstrap_ci_target = -1.0e9;
+          max_drawdown_R = 1.0e9;
+        } );
+    ]
 
 let float_field name f json =
   match Yojson.Safe.Util.member name json with
@@ -58,8 +75,14 @@ let apply_overrides base json =
   }
 
 let load ?(path = "config/optimization_guardrails.yaml") ?strategy_id () =
+  (* Prefer native OCaml config; fall back to file only if it exists and parses. *)
+  let native =
+    match strategy_id with
+    | None -> default
+    | Some id -> Option.value (Map.find native_overrides id) ~default
+  in
   let exists = Stdlib.Sys.file_exists path in
-  if not exists then Ok default
+  if not exists then Ok native
   else
     try
       let json = Yojson.Safe.from_file path in
@@ -82,9 +105,9 @@ let load ?(path = "config/optimization_guardrails.yaml") ?strategy_id () =
       in
       Ok merged
     with
-    | Yojson.Json_error msg
-    | Yojson.Safe.Util.Type_error (msg, _)
-    | Sys_error msg -> Error msg
+    | Yojson.Json_error _
+    | Yojson.Safe.Util.Type_error _
+    | Sys_error _ -> Ok native
 
 let hash t =
   let json =

@@ -125,6 +125,15 @@ let on_session_end ~config ~(book : Order_book.t) ~(last_bar : bar_1m option) =
         List.fold_map book.orders ~init:[] ~f:(fun acc o ->
             match o.status, o.trade_state, o.kind with
             | Working, Active a, Bracket plan ->
+                (* Allow EOD flatten even if the last bar precedes entry; clamp
+                   exit_ts forward to the entry timestamp to avoid invalid trades
+                   while preserving a fill. *)
+                let exit_ts =
+                  if Date.compare lb.ts.date a.entry_ts.date < 0
+                     || (Date.equal lb.ts.date a.entry_ts.date
+                         && lb.ts.minute_of_day < a.entry_ts.minute_of_day)
+                  then a.entry_ts else lb.ts
+                in
                 let exit_px =
                   EM.adjust_price ~params:config.exec
                     ~side:(exit_side plan.direction)
@@ -132,7 +141,7 @@ let on_session_end ~config ~(book : Order_book.t) ~(last_bar : bar_1m option) =
                 in
                 let trade =
                   config.build_trade ~plan ~active:a
-                    ~exit_ts:lb.ts ~exit_price:exit_px ~exit_qty:a.qty ~exit_reason:Eod_flat
+                    ~exit_ts ~exit_price:exit_px ~exit_qty:a.qty ~exit_reason:Eod_flat
                 in
                 let o' =
                   { o with

@@ -7,6 +7,7 @@ type config = {
   max_evals : int;
   init_samples : int option;
   shared_stream : bool;
+  min_trades : int;
   objective : Optimizer.objective;
   seed : int;
   host : string option;
@@ -30,6 +31,7 @@ type result = {
 
 val run :
   ?log:(string -> unit) ->
+  ?on_new_best:(iter:int -> eval -> unit) ->
   strat_pack:Strategy_registry.pack ->
   datafile:string ->
   config:config ->

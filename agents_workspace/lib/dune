@@ -2,7 +2,7 @@
 (library
  (name strategy_fast)
  (public_name qpa.strategy_fast)
- (libraries core core_unix cairo2 yojson ptime lacaml)
+ (libraries core core_unix cairo2 yojson ptime lacaml owl-base)
  (preprocess (pps ppx_jane))
  (wrapped true))
 

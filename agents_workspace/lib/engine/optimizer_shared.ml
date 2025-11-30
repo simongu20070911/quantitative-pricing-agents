@@ -70,27 +70,65 @@ let trades_guardrail (g : Guardrails.t) trades daily_pnl =
 let capacity_guardrail (_g : Guardrails.t) (_trades : trade list) = true
 
 let pvalue_guardrail (g : Guardrails.t) ?reps trades =
-  let pnls = List.map trades ~f:(fun t -> t.pnl_R) in
-  match pnls with
-  | [] -> false
-  | _ ->
+  match reps with
+  | None -> true
+  | Some r when r <= 0 -> true
+  | Some _ ->
+      let pnls = List.map trades ~f:(fun t -> t.pnl_R) in
       let mean xs =
         List.sum (module Float) xs ~f:Fun.id /. Float.of_int (List.length xs)
       in
-      let p =
-        Stat_tests.permutation_pvalue ?reps ~metric:mean pnls
-      in
+      let p = Stat_tests.permutation_pvalue ?reps ~metric:mean pnls in
       Float.(p <= g.pvalue_threshold)
 
 let bootstrap_guardrail (g : Guardrails.t) ?reps trades =
-  let pnls = List.map trades ~f:(fun t -> t.pnl_R) in
-  match pnls with
-  | [] -> false
-  | _ ->
+  match reps with
+  | None -> true
+  | Some r when r <= 0 -> true
+  | Some _ ->
+      let pnls = List.map trades ~f:(fun t -> t.pnl_R) in
       let lower, _ = Stat_tests.bootstrap_ci ?reps pnls in
       Float.(lower >= g.bootstrap_ci_target)
 
-let metric_of_objective objective trades =
+let year_sharpe_score ~lambda ~min_days ~trades_count (daily : (Date.t * float) list) =
+  let target_years = 3. in
+  let target_days = 200. in
+  let shrink_n = min_days in
+  let per_year = Int.Table.create () in
+  List.iter daily ~f:(fun (d, pnl) -> Hashtbl.add_multi per_year ~key:(Date.year d) ~data:pnl);
+  let total_days = Float.of_int (List.length daily) in
+  let sharpes, valid_years =
+    Hashtbl.fold per_year ~init:([], 0) ~f:(fun ~key:_ ~data (acc, vy) ->
+        let n = List.length data in
+        let len = Float.of_int (n + shrink_n) in
+        let sum = List.sum (module Float) data ~f:Fun.id in
+        let mean = sum /. len in
+        let sumsq =
+          List.sum (module Float) data ~f:(fun x -> (x -. mean) ** 2.)
+          +. Float.of_int shrink_n *. (mean ** 2.)
+        in
+        let var = sumsq /. len in
+        let sharpe = if Float.(var = 0.) then 0. else mean /. Float.sqrt var in
+        sharpe :: acc, (if n > 0 then vy + 1 else vy))
+  in
+  let coverage =
+    let year_cov = Float.min 1. (Float.of_int valid_years /. target_years) in
+    let day_cov = Float.min 1. (total_days /. target_days) in
+    year_cov *. day_cov
+  in
+  if trades_count = 0 then -5.
+  else
+    match sharpes with
+    | [] -> -5.
+    | xs ->
+        let len = Float.of_int (List.length xs) in
+        let mean = List.sum (module Float) xs ~f:Fun.id /. len in
+        let var = List.sum (module Float) xs ~f:(fun x -> (x -. mean) ** 2.) /. len in
+        let std = Float.sqrt var in
+        let raw = mean -. (lambda *. std) in
+        if Float.(coverage = 0.) then -5. else coverage *. raw
+
+let metric_of_objective objective ~trades ~daily_pnl =
   match objective with
   | Base.Custom f -> f trades
   | Base.Hit_rate ->
@@ -103,7 +141,7 @@ let metric_of_objective objective trades =
       /. Float.max 1. (Float.of_int (List.length trades))
   | Base.Sharpe ->
       let pnls = List.map trades ~f:(fun t -> t.pnl_R) in
-      match pnls with
+      (match pnls with
       | [] -> 0.
       | _ ->
           let len = Float.of_int (List.length pnls) in
@@ -111,7 +149,42 @@ let metric_of_objective objective trades =
           let var =
             List.sum (module Float) pnls ~f:(fun x -> (x -. mean) ** 2.) /. len
           in
-          if Float.(var = 0.) then 0. else mean /. Float.sqrt var
+          if Float.(var = 0.) then 0. else mean /. Float.sqrt var)
+  | Base.Year_sharpe { lambda; min_days } ->
+      year_sharpe_score ~lambda ~min_days ~trades_count:(List.length trades) daily_pnl
+  | Base.Simon_ratio { lambda } ->
+      let rec loop equity logs peaks mdd = function
+        | [] -> logs, mdd
+        | (_, pnl) :: tl ->
+            let r = pnl /. equity in
+            let eq' = equity *. (1. +. r) in
+            if Float.(eq' <= 1e-9) then logs @ [Float.log 1e-9], 1.0
+            else
+              let logs' = (Float.log (1. +. r)) :: logs in
+              let peak' = Float.max (List.hd peaks |> Option.value ~default:eq') eq' in
+              let dd = (peak' -. eq') /. peak' in
+              let mdd' = Float.max mdd dd in
+              loop eq' logs' (peak' :: peaks) mdd' tl
+      in
+      let logs, mdd = loop 1. [] [] 0. daily_pnl in
+      let t = Float.of_int (List.length logs) in
+      if Float.(t = 0.) then -5.
+      else
+        let g = List.sum (module Float) logs ~f:Fun.id /. t in
+        g -. (lambda *. mdd)
+  | Base.Mean_trade_lcb { confidence } ->
+      let pnls = List.map trades ~f:(fun t -> t.pnl_R) |> Array.of_list in
+      let n = Array.length pnls in
+      if n < 2 then 0.
+      else
+        let mean = Owl_base_stats.mean pnls in
+        let std = Owl_base_stats.std pnls in
+        if Float.(std = 0.) then 0.
+        else
+          let se = std /. Float.sqrt (Float.of_int n) in
+          let df = Float.of_int (n - 1) in
+          let tcrit = Optimizer.t_critical ~p:confidence ~df in
+          mean -. (tcrit *. se)
 
 (* --- Helpers --- *)
 
@@ -149,7 +222,7 @@ let score_candidate (job : Base.job) (_params : Parameters.value_map) cand =
     else bootstrap_guardrail g ?reps:job.bootstrap_reps cand.trades
   in
   if passed_trades && passed_capacity && passed_perm && passed_bootstrap then
-    let score = metric_of_objective job.objective cand.trades in
+    let score = metric_of_objective job.objective ~trades:cand.trades ~daily_pnl:cand.daily_pnl in
     Some { cand with score }
   else None
 
@@ -198,7 +271,7 @@ let run_grid_like ~(job : job) ~(strat_pack : Strategy_registry.pack) candidates
     | None ->
         let fp = fallback_params job.base.specs in
         let fallback = eval_with_cache fp in
-        { fallback with score = metric_of_objective job.base.objective fallback.trades }
+        { fallback with score = metric_of_objective job.base.objective ~trades:fallback.trades ~daily_pnl:fallback.daily_pnl }
   in
   {
     best;
@@ -220,6 +293,7 @@ let run_bayes ~(job : job) ~(strat_pack : Strategy_registry.pack) ~samples ~seed
         max_evals = samples;
         init_samples = None;
         shared_stream = job.shared_stream;
+        min_trades = job.base.guardrails.min_trades;
         objective = job.base.objective;
         seed;
         host = None;
@@ -259,7 +333,7 @@ let run_bayes ~(job : job) ~(strat_pack : Strategy_registry.pack) ~samples ~seed
         let cand =
           eval_batch ~strat_pack ~datafile:job.datafile [ fp ] |> List.hd_exn
         in
-        { cand with score = metric_of_objective job.base.objective cand.trades }
+        { cand with score = metric_of_objective job.base.objective ~trades:cand.trades ~daily_pnl:cand.daily_pnl }
   in
   {
     best;

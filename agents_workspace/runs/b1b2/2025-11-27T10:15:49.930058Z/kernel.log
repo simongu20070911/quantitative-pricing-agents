@@ -1,0 +1,24 @@
+2025-11-27T10:15:49.951969Z botorch_kernel: warmup_start init_samples=24 shared_stream=true batch_size=4 max_evals=100
+2025-11-27T10:16:07.397532Z botorch_kernel: warmup_done tested=24 warmup_s=17.445
+2025-11-27T10:16:07.415499Z botorch_kernel: iter 1 tested=24/100 -> suggest
+2025-11-27T10:16:08.888597Z botorch_kernel: iter 1 evaluating batch=12 suggest_s=1.473
+2025-11-27T10:16:20.020586Z botorch_kernel: iter 1 finished eval batch tested=36/100 eval_s=11.132
+2025-11-27T10:16:20.021723Z botorch_kernel: iter 1 new_best=0.0008 after 36 evals
+2025-11-27T10:16:20.039144Z botorch_kernel: iter 2 tested=36/100 -> suggest
+2025-11-27T10:16:24.075043Z botorch_kernel: iter 2 evaluating batch=12 suggest_s=4.036
+2025-11-27T10:16:35.224756Z botorch_kernel: iter 2 finished eval batch tested=48/100 eval_s=11.150
+2025-11-27T10:16:35.237971Z botorch_kernel: iter 3 tested=48/100 -> suggest
+2025-11-27T10:16:37.692095Z botorch_kernel: iter 3 evaluating batch=12 suggest_s=2.454
+2025-11-27T10:16:48.709056Z botorch_kernel: iter 3 finished eval batch tested=60/100 eval_s=11.017
+2025-11-27T10:16:48.723414Z botorch_kernel: iter 4 tested=60/100 -> suggest
+2025-11-27T10:16:51.057962Z botorch_kernel: iter 4 evaluating batch=12 suggest_s=2.335
+2025-11-27T10:17:02.146219Z botorch_kernel: iter 4 finished eval batch tested=72/100 eval_s=11.088
+2025-11-27T10:17:02.160595Z botorch_kernel: iter 5 tested=72/100 -> suggest
+2025-11-27T10:17:06.079031Z botorch_kernel: iter 5 evaluating batch=12 suggest_s=3.918
+2025-11-27T10:17:17.053029Z botorch_kernel: iter 5 finished eval batch tested=84/100 eval_s=10.974
+2025-11-27T10:17:17.070015Z botorch_kernel: iter 6 tested=84/100 -> suggest
+2025-11-27T10:17:20.385375Z botorch_kernel: iter 6 evaluating batch=12 suggest_s=3.315
+2025-11-27T10:17:31.350029Z botorch_kernel: iter 6 finished eval batch tested=96/100 eval_s=10.965
+2025-11-27T10:17:31.363749Z botorch_kernel: iter 7 tested=96/100 -> suggest
+2025-11-27T10:17:35.060392Z botorch_kernel: iter 7 evaluating batch=4 suggest_s=3.697
+2025-11-27T10:17:42.017171Z botorch_kernel: iter 7 finished eval batch tested=100/100 eval_s=6.957

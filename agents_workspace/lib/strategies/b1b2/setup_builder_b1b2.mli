@@ -12,3 +12,10 @@ val aggregate_bars : B1b2_params.Setup.t -> string -> agg_tables
 val build_setups : B1b2_params.Setup.t -> agg_tables -> setup Date.Table.t
 val build : B1b2_params.Setup.t -> string -> setup Date.Table.t
 val build_with_defaults : string -> setup Date.Table.t
+
+module Streaming : sig
+  type t
+  val create : B1b2_params.Setup.t -> t
+  val on_bar : t -> Types.bar_1m -> setup option
+  val finalize : t -> unit
+end

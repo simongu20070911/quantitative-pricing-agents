@@ -1,0 +1,4 @@
+2025-11-27T03:27:55.550658Z botorch_kernel: warmup_start init_samples=40 shared_stream=true batch_size=4 max_evals=400
+2025-11-27T03:28:21.882935Z botorch_kernel: warmup_done tested=40 warmup_s=26.332
+2025-11-27T03:28:21.899548Z botorch_kernel: iter 1 tested=40/400 -> suggest
+2025-11-27T03:28:24.351484Z botorch_kernel: iter 1 evaluating batch=12 suggest_s=2.452

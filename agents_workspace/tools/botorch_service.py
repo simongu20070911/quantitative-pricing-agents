@@ -8,16 +8,19 @@ Endpoints:
       "batch_size": int,
       "n_regions": int }
   POST /suggest
-    { "X": [[...]], "Y": [ ... ] }   # arrays aligned with bounds order
+    { "X": [[...]], "Y": [ ... ], "region_ids": [int]? }   # arrays aligned with bounds order
+    - if region_ids omitted, suggestions/observations are round-robin assigned across regions
     returns { "candidates": [[...]], "region_ids": [int], "state": <opaque> }
   POST /update
-    { "state": <state>, "Y_new": [ ... ] }  # optional; updates success/failure
+    { "state": <state>, "Y_new": [ ... ], "region_ids": [int]? }
+    - if region_ids omitted, falls back to the region_ids stored in state from the last /suggest
+      (length must match Y_new); otherwise an error is raised
+    - region_ids must be in [0, n_regions-1]
 
 Notes:
-  - Uses BoTorch SingleTaskGP + qEI inside TuRBO regions.
+  - Uses BoTorch SingleTaskGP + qEI inside TuRBO regions (one GP per region on its own data).
   - Trust-region defaults per TuRBO: length init 0.8, bounds [0.5^7,1.6],
     success_tol=10, failure_tol=ceil(max(4/batch, d/batch)), epsilon=1e-3|best|.
-  - Candidate pool: min(5000, max(2000, 200*d)) Sobol samples per region; picks q=batch_size with qEI.
 """
 
 from __future__ import annotations
@@ -29,10 +32,9 @@ import torch
 from fastapi import FastAPI
 from pydantic import BaseModel
 from botorch import fit_gpytorch_mll
-from botorch.acquisition import qNoisyExpectedImprovement
+from botorch.acquisition import qLogNoisyExpectedImprovement
 from botorch.models import SingleTaskGP
 from botorch.optim import optimize_acqf
-from botorch.utils.sampling import draw_sobol_samples
 from botorch.utils.transforms import normalize, unnormalize
 from gpytorch.mlls import ExactMarginalLogLikelihood
 
@@ -51,17 +53,24 @@ class InitRequest(BaseModel):
     bounds: List[Bounds]
     batch_size: int = 5
     n_regions: int = 3
+    session_id: Optional[str] = None
 
 
 class SuggestRequest(BaseModel):
     X: List[List[float]]
     Y: List[float]
-    state: Optional[dict] = None
+    # Optional per-observation region assignments; defaults to round-robin if absent
+    region_ids: Optional[List[int]] = None
+    state: dict
+    session_id: Optional[str] = None
 
 
 class UpdateRequest(BaseModel):
     state: dict
     Y_new: List[float]
+    # Region ids aligned with Y_new; required for per-region adaptation, falls back to broadcast if missing
+    region_ids: Optional[List[int]] = None
+    session_id: Optional[str] = None
 
 
 class TurboState:
@@ -115,14 +124,18 @@ class ServiceState:
         self.upper = torch.tensor([b.upper for b in bounds], dtype=torch.double)
         self.integer_mask = torch.tensor([1 if b.integer else 0 for b in bounds], dtype=torch.bool)
         self.domains = [b.domain for b in bounds]
+        self.encoded_lower, self.encoded_upper = self._make_encoded_bounds()
         self.batch_size = batch_size
         self.states = [TurboState(len(bounds), batch_size) for _ in range(n_regions)]
+        # Tracks region_ids for the last suggest response to align updates when clients omit region_ids
+        self.last_region_ids: List[int] = []
 
     def to_json(self):
         return {
             "bounds": [b.dict() for b in self.bounds],
             "batch_size": self.batch_size,
             "states": [s.to_json() for s in self.states],
+            "last_region_ids": self.last_region_ids,
         }
 
     @classmethod
@@ -130,10 +143,26 @@ class ServiceState:
         bounds = [Bounds(**b) for b in d["bounds"]]
         obj = cls(bounds, d["batch_size"], len(d["states"]))
         obj.states = [TurboState.from_json(s) for s in d["states"]]
+        obj.last_region_ids = d.get("last_region_ids", [])
         return obj
 
-
-svc_state: Optional[ServiceState] = None
+    def _make_encoded_bounds(self) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Build bounds consistent with encoded indices for categorical/discrete dims.
+        Continuous/integer use provided bounds.
+        """
+        lowers = []
+        uppers = []
+        for b, dom in zip(self.bounds, self.domains):
+            kind = dom["kind"]
+            if kind in ("categorical", "discrete"):
+                k = len(dom["values"])
+                lowers.append(0.0)
+                uppers.append(float(max(k - 1, 0)))
+            else:
+                lowers.append(b.lower)
+                uppers.append(b.upper)
+        return torch.tensor(lowers, dtype=torch.double), torch.tensor(uppers, dtype=torch.double)
 
 
 def fit_model(X: torch.Tensor, Y: torch.Tensor) -> SingleTaskGP:
@@ -147,15 +176,15 @@ def generate_batch(
     state: TurboState,
     X: torch.Tensor,
     Y: torch.Tensor,
-    bounds: torch.Tensor,
+    encoded_bounds: torch.Tensor,
     domains: List[dict],
     integer_mask: torch.Tensor,
     batch_size: int,
 ):
     # Encode discrete/categorical to indices
-    X_enc, enc_meta = encode_X(X, domains)
-    # Normalize to [0,1]^d
-    X_norm = normalize(X_enc, bounds=bounds)
+    X_enc = encode_X(X, domains)
+    # Normalize to [0,1]^d using encoded bounds
+    X_norm = normalize(X_enc, bounds=encoded_bounds)
     Y_centered = Y
 
     # Update center to incumbent for this region
@@ -168,13 +197,8 @@ def generate_batch(
     tr_lb = torch.clamp(state.center - half, 0.0, 1.0)
     tr_ub = torch.clamp(state.center + half, 0.0, 1.0)
 
-    # Candidate pool (Sobol in TR)
-    d = X.shape[1]
-    n_candidates = min(5000, max(2000, 200 * d))
-    sobol = draw_sobol_samples(torch.stack([tr_lb, tr_ub]), n_candidates, 1).squeeze(1)
-
     gp = fit_model(X_norm, Y_centered)
-    qnei = qNoisyExpectedImprovement(model=gp, X_baseline=X_norm)
+    qnei = qLogNoisyExpectedImprovement(model=gp, X_baseline=X_norm)
     # optimize qNEI in the TR
     candidates, _ = optimize_acqf(
         acq_function=qnei,
@@ -184,9 +208,9 @@ def generate_batch(
         raw_samples=128,
     )
     # Unnormalize and decode
-    X_cand = unnormalize(candidates, bounds=bounds)
-    X_cand = decode_X(X_cand, domains, enc_meta, bounds)
-    X_cand = snap_integers(X_cand, bounds, integer_mask)
+    X_cand = unnormalize(candidates, bounds=encoded_bounds)
+    X_cand = decode_X(X_cand, domains)
+    X_cand = snap_integers(X_cand, encoded_bounds, integer_mask)
     return X_cand, None
 
 
@@ -218,44 +242,92 @@ def update_state(state: TurboState, y_new: torch.Tensor):
 
 @app.post("/init")
 def init(req: InitRequest):
-    global svc_state
     svc_state = ServiceState(req.bounds, req.batch_size, req.n_regions)
-    return {"state": svc_state.to_json()}
+    return {"state": svc_state.to_json(), "session_id": req.session_id or "default"}
 
 
 @app.post("/suggest")
 def suggest(req: SuggestRequest):
-    global svc_state
-    if svc_state is None:
-        raise ValueError("Service not initialized; call /init first.")
-    if req.state:
-        svc_state = ServiceState.from_json(req.state)
+    svc_state = ServiceState.from_json(req.state)
 
-    bounds = torch.stack([svc_state.lower, svc_state.upper])
+    if len(req.X) != len(req.Y):
+        raise ValueError("X and Y must have the same length")
+
+    n_regions = len(svc_state.states)
+    encoded_bounds = torch.stack([svc_state.encoded_lower, svc_state.encoded_upper])
     X = torch.tensor(req.X, dtype=torch.double)
-    X = snap_integers(X, bounds, svc_state.integer_mask)
+    X = snap_integers(X, encoded_bounds, svc_state.integer_mask)
     Y = torch.tensor(req.Y, dtype=torch.double).unsqueeze(-1)
 
+    if req.region_ids is not None:
+        region_ids = torch.tensor(req.region_ids, dtype=torch.long)
+        if region_ids.numel() != len(req.X):
+            raise ValueError("region_ids length must match X/Y length")
+    else:
+        # deterministic round-robin assignment for backward compatibility
+        region_ids = torch.arange(len(req.X), dtype=torch.long) % max(1, n_regions)
+
+    if region_ids.numel() > 0:
+        if region_ids.min() < 0 or region_ids.max() >= n_regions:
+            raise ValueError("region_ids must be between 0 and n_regions-1")
+
     candidates = []
-    region_ids = []
-    # Round-robin regions
+    region_out_ids = []
+
+    d = X.shape[1] if X.numel() > 0 else len(svc_state.bounds)
     for rid, state in enumerate(svc_state.states):
-        X_cand, _ = generate_batch(state, X, Y, bounds, svc_state.domains, svc_state.integer_mask, svc_state.batch_size)
+        mask = region_ids == rid
+        if mask.any():
+            X_r = X[mask]
+            Y_r = Y[mask]
+            X_cand, _ = generate_batch(
+                state,
+                X_r,
+                Y_r,
+                encoded_bounds,
+                svc_state.domains,
+                svc_state.integer_mask,
+                svc_state.batch_size,
+            )
+        else:
+            # No observations for this region yet: sample uniformly in encoded space
+            rand = torch.rand((svc_state.batch_size, d), dtype=torch.double)
+            X_cand = unnormalize(rand, bounds=encoded_bounds)
+            X_cand = decode_X(X_cand, svc_state.domains)
+            X_cand = snap_integers(X_cand, encoded_bounds, svc_state.integer_mask)
         candidates.append(X_cand)
-        region_ids.extend([rid] * X_cand.shape[0])
+        region_out_ids.extend([rid] * X_cand.shape[0])
+
+    # Persist the ordering so /update can align Y_new when region_ids are omitted
+    svc_state.last_region_ids = region_out_ids
+
     out = torch.cat(candidates, dim=0).tolist()
-    return {"candidates": out, "region_ids": region_ids, "state": svc_state.to_json()}
+    return {"candidates": out, "region_ids": region_out_ids, "state": svc_state.to_json()}
 
 
 @app.post("/update")
 def update(req: UpdateRequest):
-    global svc_state
-    if svc_state is None:
-        raise ValueError("Service not initialized; call /init first.")
     svc_state = ServiceState.from_json(req.state)
     y_new = torch.tensor(req.Y_new, dtype=torch.double)
-    for s in svc_state.states:
-        update_state(s, y_new.unsqueeze(-1))
+    if req.region_ids is not None:
+        region_ids = torch.tensor(req.region_ids, dtype=torch.long)
+    else:
+        # Fallback to last suggest ordering
+        if not svc_state.last_region_ids:
+            raise ValueError("region_ids missing and no prior suggest history to infer them")
+        region_ids = torch.tensor(svc_state.last_region_ids, dtype=torch.long)
+
+    if region_ids.numel() != len(req.Y_new):
+        raise ValueError("region_ids length must match Y_new length")
+
+    n_regions = len(svc_state.states)
+    if region_ids.min() < 0 or region_ids.max() >= n_regions:
+        raise ValueError("region_ids must be between 0 and n_regions-1")
+
+    for rid, s in enumerate(svc_state.states):
+        mask = region_ids == rid
+        if mask.any():
+            update_state(s, y_new[mask].unsqueeze(-1))
     return {"state": svc_state.to_json()}
 
 
@@ -273,38 +345,32 @@ def snap_integers(x: torch.Tensor, bounds: torch.Tensor, int_mask: torch.Tensor)
     return snapped
 
 
-def encode_X(X_raw: torch.Tensor, domains: List[dict]) -> Tuple[torch.Tensor, List[Tuple[str, int]]]:
+def encode_X(X_raw: torch.Tensor, domains: List[dict]) -> torch.Tensor:
     """
     Encode categorical/discrete dimensions to numeric indices for the GP.
-    Returns encoded X and a list of (kind, size) for decoding.
     """
     encoded_cols = []
-    enc_meta = []
     for j, dom in enumerate(domains):
         kind = dom["kind"]
         if kind == "categorical":
             values = dom["values"]
-            enc_meta.append(("categorical", len(values)))
             idx = X_raw[..., j].round().clamp(0, len(values) - 1)
             encoded_cols.append(idx.unsqueeze(-1))
         elif kind == "discrete":
             values = dom["values"]
-            enc_meta.append(("discrete", len(values)))
             # map to nearest index
             vals = torch.tensor(values, dtype=X_raw.dtype, device=X_raw.device)
             diffs = (X_raw[..., j].unsqueeze(-1) - vals).abs()
             idx = diffs.argmin(dim=-1)
             encoded_cols.append(idx.unsqueeze(-1))
         elif kind == "integer":
-            enc_meta.append(("integer", 1))
             encoded_cols.append(X_raw[..., j].unsqueeze(-1))
         else:
-            enc_meta.append(("continuous", 1))
             encoded_cols.append(X_raw[..., j].unsqueeze(-1))
-    return torch.cat(encoded_cols, dim=-1), enc_meta
+    return torch.cat(encoded_cols, dim=-1)
 
 
-def decode_X(X_encoded: torch.Tensor, domains: List[dict], enc_meta: List[Tuple[str, int]], bounds: torch.Tensor) -> torch.Tensor:
+def decode_X(X_encoded: torch.Tensor, domains: List[dict]) -> torch.Tensor:
     cols = []
     for j, dom in enumerate(domains):
         kind = dom["kind"]

@@ -1,0 +1,310 @@
+2025-11-27T13:07:33.104638Z botorch_kernel: warmup_start init_samples=24 shared_stream=true batch_size=4 max_evals=1224
+2025-11-27T13:07:50.224450Z botorch_kernel: warmup_done tested=24 warmup_s=17.114
+2025-11-27T13:07:50.245716Z botorch_kernel: iter 1 tested=24/1224 -> suggest
+2025-11-27T13:07:52.730653Z botorch_kernel: iter 1 evaluating batch=12 suggest_s=2.485
+2025-11-27T13:08:04.310290Z botorch_kernel: iter 1 finished eval batch tested=36/1224 eval_s=11.580
+2025-11-27T13:08:04.327269Z botorch_kernel: iter 2 tested=36/1224 -> suggest
+2025-11-27T13:08:07.076345Z botorch_kernel: iter 2 evaluating batch=12 suggest_s=2.749
+2025-11-27T13:08:18.141603Z botorch_kernel: iter 2 finished eval batch tested=48/1224 eval_s=11.065
+2025-11-27T13:08:18.159113Z botorch_kernel: iter 3 tested=48/1224 -> suggest
+2025-11-27T13:08:21.017866Z botorch_kernel: iter 3 evaluating batch=12 suggest_s=2.859
+2025-11-27T13:08:32.327130Z botorch_kernel: iter 3 finished eval batch tested=60/1224 eval_s=11.309
+2025-11-27T13:08:32.327203Z botorch_kernel: iter 3 new_best=0.8665 after 60 evals
+2025-11-27T13:08:32.342516Z botorch_kernel: iter 4 tested=60/1224 -> suggest
+2025-11-27T13:08:35.577171Z botorch_kernel: iter 4 evaluating batch=12 suggest_s=3.235
+2025-11-27T13:08:46.856963Z botorch_kernel: iter 4 finished eval batch tested=72/1224 eval_s=11.280
+2025-11-27T13:08:46.857183Z botorch_kernel: iter 4 new_best=3.3436 after 72 evals
+2025-11-27T13:08:46.876505Z botorch_kernel: iter 5 tested=72/1224 -> suggest
+2025-11-27T13:08:50.589502Z botorch_kernel: iter 5 evaluating batch=12 suggest_s=3.713
+2025-11-27T13:09:01.820023Z botorch_kernel: iter 5 finished eval batch tested=84/1224 eval_s=11.230
+2025-11-27T13:09:01.840840Z botorch_kernel: iter 6 tested=84/1224 -> suggest
+2025-11-27T13:09:05.442403Z botorch_kernel: iter 6 evaluating batch=12 suggest_s=3.602
+2025-11-27T13:09:16.914977Z botorch_kernel: iter 6 finished eval batch tested=96/1224 eval_s=11.473
+2025-11-27T13:09:16.942532Z botorch_kernel: iter 7 tested=96/1224 -> suggest
+2025-11-27T13:09:22.422290Z botorch_kernel: iter 7 evaluating batch=12 suggest_s=5.480
+2025-11-27T13:09:34.027141Z botorch_kernel: iter 7 finished eval batch tested=108/1224 eval_s=11.605
+2025-11-27T13:09:34.045029Z botorch_kernel: iter 8 tested=108/1224 -> suggest
+2025-11-27T13:09:38.264749Z botorch_kernel: iter 8 evaluating batch=12 suggest_s=4.220
+2025-11-27T13:09:49.512199Z botorch_kernel: iter 8 finished eval batch tested=120/1224 eval_s=11.247
+2025-11-27T13:09:49.528411Z botorch_kernel: iter 9 tested=120/1224 -> suggest
+2025-11-27T13:09:54.479164Z botorch_kernel: iter 9 evaluating batch=12 suggest_s=4.951
+2025-11-27T13:10:05.499289Z botorch_kernel: iter 9 finished eval batch tested=132/1224 eval_s=11.020
+2025-11-27T13:10:05.519963Z botorch_kernel: iter 10 tested=132/1224 -> suggest
+2025-11-27T13:10:09.496283Z botorch_kernel: iter 10 evaluating batch=12 suggest_s=3.976
+2025-11-27T13:10:20.344866Z botorch_kernel: iter 10 finished eval batch tested=144/1224 eval_s=10.849
+2025-11-27T13:10:20.360298Z botorch_kernel: iter 11 tested=144/1224 -> suggest
+2025-11-27T13:10:26.185139Z botorch_kernel: iter 11 evaluating batch=12 suggest_s=5.825
+2025-11-27T13:10:37.354688Z botorch_kernel: iter 11 finished eval batch tested=156/1224 eval_s=11.170
+2025-11-27T13:10:37.381978Z botorch_kernel: iter 12 tested=156/1224 -> suggest
+2025-11-27T13:10:43.672088Z botorch_kernel: iter 12 evaluating batch=12 suggest_s=6.290
+2025-11-27T13:10:54.801666Z botorch_kernel: iter 12 finished eval batch tested=168/1224 eval_s=11.130
+2025-11-27T13:10:54.816990Z botorch_kernel: iter 13 tested=168/1224 -> suggest
+2025-11-27T13:11:00.982422Z botorch_kernel: iter 13 evaluating batch=12 suggest_s=6.165
+2025-11-27T13:11:11.826209Z botorch_kernel: iter 13 finished eval batch tested=180/1224 eval_s=10.844
+2025-11-27T13:11:11.843191Z botorch_kernel: iter 14 tested=180/1224 -> suggest
+2025-11-27T13:11:17.757681Z botorch_kernel: iter 14 evaluating batch=12 suggest_s=5.914
+2025-11-27T13:11:28.526195Z botorch_kernel: iter 14 finished eval batch tested=192/1224 eval_s=10.768
+2025-11-27T13:11:28.526264Z botorch_kernel: iter 14 new_best=3.4254 after 192 evals
+2025-11-27T13:11:28.545194Z botorch_kernel: iter 15 tested=192/1224 -> suggest
+2025-11-27T13:11:34.518541Z botorch_kernel: iter 15 evaluating batch=12 suggest_s=5.973
+2025-11-27T13:11:45.826043Z botorch_kernel: iter 15 finished eval batch tested=204/1224 eval_s=11.307
+2025-11-27T13:11:45.826119Z botorch_kernel: iter 15 new_best=3.4345 after 204 evals
+2025-11-27T13:11:45.844793Z botorch_kernel: iter 16 tested=204/1224 -> suggest
+2025-11-27T13:11:53.750957Z botorch_kernel: iter 16 evaluating batch=12 suggest_s=7.906
+2025-11-27T13:12:04.534053Z botorch_kernel: iter 16 finished eval batch tested=216/1224 eval_s=10.783
+2025-11-27T13:12:04.552226Z botorch_kernel: iter 17 tested=216/1224 -> suggest
+2025-11-27T13:12:13.278979Z botorch_kernel: iter 17 evaluating batch=12 suggest_s=8.727
+2025-11-27T13:12:24.183129Z botorch_kernel: iter 17 finished eval batch tested=228/1224 eval_s=10.904
+2025-11-27T13:12:24.197495Z botorch_kernel: iter 18 tested=228/1224 -> suggest
+2025-11-27T13:12:30.967448Z botorch_kernel: iter 18 evaluating batch=12 suggest_s=6.770
+2025-11-27T13:12:41.861594Z botorch_kernel: iter 18 finished eval batch tested=240/1224 eval_s=10.894
+2025-11-27T13:12:41.879053Z botorch_kernel: iter 19 tested=240/1224 -> suggest
+2025-11-27T13:12:52.470256Z botorch_kernel: iter 19 evaluating batch=12 suggest_s=10.591
+2025-11-27T13:13:03.273562Z botorch_kernel: iter 19 finished eval batch tested=252/1224 eval_s=10.803
+2025-11-27T13:13:03.289403Z botorch_kernel: iter 20 tested=252/1224 -> suggest
+2025-11-27T13:13:12.146787Z botorch_kernel: iter 20 evaluating batch=12 suggest_s=8.857
+2025-11-27T13:13:22.940398Z botorch_kernel: iter 20 finished eval batch tested=264/1224 eval_s=10.794
+2025-11-27T13:13:22.943413Z botorch_kernel: iter 20 new_best=3.5099 after 264 evals
+2025-11-27T13:13:22.957900Z botorch_kernel: iter 21 tested=264/1224 -> suggest
+2025-11-27T13:13:28.893634Z botorch_kernel: iter 21 evaluating batch=12 suggest_s=5.936
+2025-11-27T13:13:39.798310Z botorch_kernel: iter 21 finished eval batch tested=276/1224 eval_s=10.905
+2025-11-27T13:13:39.815010Z botorch_kernel: iter 22 tested=276/1224 -> suggest
+2025-11-27T13:13:52.705850Z botorch_kernel: iter 22 evaluating batch=12 suggest_s=12.891
+2025-11-27T13:14:03.522370Z botorch_kernel: iter 22 finished eval batch tested=288/1224 eval_s=10.816
+2025-11-27T13:14:03.522449Z botorch_kernel: iter 22 new_best=3.8289 after 288 evals
+2025-11-27T13:14:03.536858Z botorch_kernel: iter 23 tested=288/1224 -> suggest
+2025-11-27T13:14:13.408195Z botorch_kernel: iter 23 evaluating batch=12 suggest_s=9.871
+2025-11-27T13:14:24.229858Z botorch_kernel: iter 23 finished eval batch tested=300/1224 eval_s=10.822
+2025-11-27T13:14:24.244510Z botorch_kernel: iter 24 tested=300/1224 -> suggest
+2025-11-27T13:14:36.424302Z botorch_kernel: iter 24 evaluating batch=12 suggest_s=12.180
+2025-11-27T13:14:47.403134Z botorch_kernel: iter 24 finished eval batch tested=312/1224 eval_s=10.979
+2025-11-27T13:14:47.403226Z botorch_kernel: iter 24 new_best=3.8571 after 312 evals
+2025-11-27T13:14:47.432129Z botorch_kernel: iter 25 tested=312/1224 -> suggest
+2025-11-27T13:14:57.293861Z botorch_kernel: iter 25 evaluating batch=12 suggest_s=9.862
+2025-11-27T13:15:08.237089Z botorch_kernel: iter 25 finished eval batch tested=324/1224 eval_s=10.943
+2025-11-27T13:15:08.256629Z botorch_kernel: iter 26 tested=324/1224 -> suggest
+2025-11-27T13:15:20.650232Z botorch_kernel: iter 26 evaluating batch=12 suggest_s=12.394
+2025-11-27T13:15:31.515519Z botorch_kernel: iter 26 finished eval batch tested=336/1224 eval_s=10.865
+2025-11-27T13:15:31.531722Z botorch_kernel: iter 27 tested=336/1224 -> suggest
+2025-11-27T13:15:41.510879Z botorch_kernel: iter 27 evaluating batch=12 suggest_s=9.979
+2025-11-27T13:15:52.304011Z botorch_kernel: iter 27 finished eval batch tested=348/1224 eval_s=10.793
+2025-11-27T13:15:52.319808Z botorch_kernel: iter 28 tested=348/1224 -> suggest
+2025-11-27T13:16:02.404830Z botorch_kernel: iter 28 evaluating batch=12 suggest_s=10.085
+2025-11-27T13:16:13.134150Z botorch_kernel: iter 28 finished eval batch tested=360/1224 eval_s=10.729
+2025-11-27T13:16:13.134224Z botorch_kernel: iter 28 new_best=3.9721 after 360 evals
+2025-11-27T13:16:13.150126Z botorch_kernel: iter 29 tested=360/1224 -> suggest
+2025-11-27T13:16:24.326039Z botorch_kernel: iter 29 evaluating batch=12 suggest_s=11.176
+2025-11-27T13:16:35.227853Z botorch_kernel: iter 29 finished eval batch tested=372/1224 eval_s=10.902
+2025-11-27T13:16:35.246077Z botorch_kernel: iter 30 tested=372/1224 -> suggest
+2025-11-27T13:16:45.210523Z botorch_kernel: iter 30 evaluating batch=12 suggest_s=9.964
+2025-11-27T13:16:55.994978Z botorch_kernel: iter 30 finished eval batch tested=384/1224 eval_s=10.784
+2025-11-27T13:16:56.012433Z botorch_kernel: iter 31 tested=384/1224 -> suggest
+2025-11-27T13:17:03.270350Z botorch_kernel: iter 31 evaluating batch=12 suggest_s=7.258
+2025-11-27T13:17:14.121808Z botorch_kernel: iter 31 finished eval batch tested=396/1224 eval_s=10.851
+2025-11-27T13:17:14.143830Z botorch_kernel: iter 32 tested=396/1224 -> suggest
+2025-11-27T13:17:26.667534Z botorch_kernel: iter 32 evaluating batch=12 suggest_s=12.524
+2025-11-27T13:17:37.460604Z botorch_kernel: iter 32 finished eval batch tested=408/1224 eval_s=10.793
+2025-11-27T13:17:37.477501Z botorch_kernel: iter 33 tested=408/1224 -> suggest
+2025-11-27T13:17:48.610544Z botorch_kernel: iter 33 evaluating batch=12 suggest_s=11.133
+2025-11-27T13:17:59.366604Z botorch_kernel: iter 33 finished eval batch tested=420/1224 eval_s=10.756
+2025-11-27T13:17:59.385227Z botorch_kernel: iter 34 tested=420/1224 -> suggest
+2025-11-27T13:18:08.543101Z botorch_kernel: iter 34 evaluating batch=12 suggest_s=9.158
+2025-11-27T13:18:19.286647Z botorch_kernel: iter 34 finished eval batch tested=432/1224 eval_s=10.743
+2025-11-27T13:18:19.311585Z botorch_kernel: iter 35 tested=432/1224 -> suggest
+2025-11-27T13:18:34.252790Z botorch_kernel: iter 35 evaluating batch=12 suggest_s=14.941
+2025-11-27T13:18:45.019724Z botorch_kernel: iter 35 finished eval batch tested=444/1224 eval_s=10.767
+2025-11-27T13:18:45.034346Z botorch_kernel: iter 36 tested=444/1224 -> suggest
+2025-11-27T13:18:59.997270Z botorch_kernel: iter 36 evaluating batch=12 suggest_s=14.963
+2025-11-27T13:19:10.825579Z botorch_kernel: iter 36 finished eval batch tested=456/1224 eval_s=10.828
+2025-11-27T13:19:10.844389Z botorch_kernel: iter 37 tested=456/1224 -> suggest
+2025-11-27T13:19:21.185371Z botorch_kernel: iter 37 evaluating batch=12 suggest_s=10.341
+2025-11-27T13:19:31.872074Z botorch_kernel: iter 37 finished eval batch tested=468/1224 eval_s=10.686
+2025-11-27T13:19:31.886283Z botorch_kernel: iter 38 tested=468/1224 -> suggest
+2025-11-27T13:19:43.059453Z botorch_kernel: iter 38 evaluating batch=12 suggest_s=11.173
+2025-11-27T13:19:53.794022Z botorch_kernel: iter 38 finished eval batch tested=480/1224 eval_s=10.734
+2025-11-27T13:19:53.808072Z botorch_kernel: iter 39 tested=480/1224 -> suggest
+2025-11-27T13:20:05.628684Z botorch_kernel: iter 39 evaluating batch=12 suggest_s=11.821
+2025-11-27T13:20:16.331561Z botorch_kernel: iter 39 finished eval batch tested=492/1224 eval_s=10.703
+2025-11-27T13:20:16.350842Z botorch_kernel: iter 40 tested=492/1224 -> suggest
+2025-11-27T13:20:30.718638Z botorch_kernel: iter 40 evaluating batch=12 suggest_s=14.368
+2025-11-27T13:20:41.439828Z botorch_kernel: iter 40 finished eval batch tested=504/1224 eval_s=10.721
+2025-11-27T13:20:41.456760Z botorch_kernel: iter 41 tested=504/1224 -> suggest
+2025-11-27T13:20:55.295268Z botorch_kernel: iter 41 evaluating batch=12 suggest_s=13.838
+2025-11-27T13:21:06.007463Z botorch_kernel: iter 41 finished eval batch tested=516/1224 eval_s=10.712
+2025-11-27T13:21:06.022512Z botorch_kernel: iter 42 tested=516/1224 -> suggest
+2025-11-27T13:21:26.619247Z botorch_kernel: iter 42 evaluating batch=12 suggest_s=20.597
+2025-11-27T13:21:37.437724Z botorch_kernel: iter 42 finished eval batch tested=528/1224 eval_s=10.818
+2025-11-27T13:21:37.453941Z botorch_kernel: iter 43 tested=528/1224 -> suggest
+2025-11-27T13:21:53.699423Z botorch_kernel: iter 43 evaluating batch=12 suggest_s=16.245
+2025-11-27T13:22:04.461304Z botorch_kernel: iter 43 finished eval batch tested=540/1224 eval_s=10.762
+2025-11-27T13:22:04.486394Z botorch_kernel: iter 44 tested=540/1224 -> suggest
+2025-11-27T13:22:25.349923Z botorch_kernel: iter 44 evaluating batch=12 suggest_s=20.863
+2025-11-27T13:22:36.108959Z botorch_kernel: iter 44 finished eval batch tested=552/1224 eval_s=10.759
+2025-11-27T13:22:36.122716Z botorch_kernel: iter 45 tested=552/1224 -> suggest
+2025-11-27T13:22:52.820977Z botorch_kernel: iter 45 evaluating batch=12 suggest_s=16.698
+2025-11-27T13:23:03.574588Z botorch_kernel: iter 45 finished eval batch tested=564/1224 eval_s=10.754
+2025-11-27T13:23:03.592967Z botorch_kernel: iter 46 tested=564/1224 -> suggest
+2025-11-27T13:23:23.997606Z botorch_kernel: iter 46 evaluating batch=12 suggest_s=20.404
+2025-11-27T13:23:34.834336Z botorch_kernel: iter 46 finished eval batch tested=576/1224 eval_s=10.837
+2025-11-27T13:23:34.850616Z botorch_kernel: iter 47 tested=576/1224 -> suggest
+2025-11-27T13:23:55.363849Z botorch_kernel: iter 47 evaluating batch=12 suggest_s=20.513
+2025-11-27T13:24:06.573299Z botorch_kernel: iter 47 finished eval batch tested=588/1224 eval_s=11.209
+2025-11-27T13:24:06.595135Z botorch_kernel: iter 48 tested=588/1224 -> suggest
+2025-11-27T13:24:33.602054Z botorch_kernel: iter 48 evaluating batch=12 suggest_s=27.007
+2025-11-27T13:24:44.532538Z botorch_kernel: iter 48 finished eval batch tested=600/1224 eval_s=10.930
+2025-11-27T13:24:44.547228Z botorch_kernel: iter 49 tested=600/1224 -> suggest
+2025-11-27T13:24:59.987506Z botorch_kernel: iter 49 evaluating batch=12 suggest_s=15.440
+2025-11-27T13:25:11.357453Z botorch_kernel: iter 49 finished eval batch tested=612/1224 eval_s=11.370
+2025-11-27T13:25:11.375443Z botorch_kernel: iter 50 tested=612/1224 -> suggest
+2025-11-27T13:25:42.777428Z botorch_kernel: iter 50 evaluating batch=12 suggest_s=31.402
+2025-11-27T13:25:54.046891Z botorch_kernel: iter 50 finished eval batch tested=624/1224 eval_s=11.269
+2025-11-27T13:25:54.064623Z botorch_kernel: iter 51 tested=624/1224 -> suggest
+2025-11-27T13:26:18.364335Z botorch_kernel: iter 51 evaluating batch=12 suggest_s=24.300
+2025-11-27T13:26:29.331368Z botorch_kernel: iter 51 finished eval batch tested=636/1224 eval_s=10.967
+2025-11-27T13:26:29.348018Z botorch_kernel: iter 52 tested=636/1224 -> suggest
+2025-11-27T13:26:50.724458Z botorch_kernel: iter 52 evaluating batch=12 suggest_s=21.376
+2025-11-27T13:27:01.970870Z botorch_kernel: iter 52 finished eval batch tested=648/1224 eval_s=11.246
+2025-11-27T13:27:01.989317Z botorch_kernel: iter 53 tested=648/1224 -> suggest
+2025-11-27T13:27:22.788520Z botorch_kernel: iter 53 evaluating batch=12 suggest_s=20.799
+2025-11-27T13:27:34.008830Z botorch_kernel: iter 53 finished eval batch tested=660/1224 eval_s=11.220
+2025-11-27T13:27:34.028199Z botorch_kernel: iter 54 tested=660/1224 -> suggest
+2025-11-27T13:28:08.221682Z botorch_kernel: iter 54 evaluating batch=12 suggest_s=34.193
+2025-11-27T13:28:19.804810Z botorch_kernel: iter 54 finished eval batch tested=672/1224 eval_s=11.583
+2025-11-27T13:28:19.838149Z botorch_kernel: iter 55 tested=672/1224 -> suggest
+2025-11-27T13:28:33.540255Z botorch_kernel: iter 55 evaluating batch=12 suggest_s=13.702
+2025-11-27T13:28:44.624426Z botorch_kernel: iter 55 finished eval batch tested=684/1224 eval_s=11.084
+2025-11-27T13:28:44.646685Z botorch_kernel: iter 56 tested=684/1224 -> suggest
+2025-11-27T13:29:27.531298Z botorch_kernel: iter 56 evaluating batch=12 suggest_s=42.885
+2025-11-27T13:29:38.512304Z botorch_kernel: iter 56 finished eval batch tested=696/1224 eval_s=10.981
+2025-11-27T13:29:38.528560Z botorch_kernel: iter 57 tested=696/1224 -> suggest
+2025-11-27T13:30:15.424848Z botorch_kernel: iter 57 evaluating batch=12 suggest_s=36.896
+2025-11-27T13:30:26.361510Z botorch_kernel: iter 57 finished eval batch tested=708/1224 eval_s=10.937
+2025-11-27T13:30:26.377176Z botorch_kernel: iter 58 tested=708/1224 -> suggest
+2025-11-27T13:31:10.837907Z botorch_kernel: iter 58 evaluating batch=12 suggest_s=44.461
+2025-11-27T13:31:21.928289Z botorch_kernel: iter 58 finished eval batch tested=720/1224 eval_s=11.090
+2025-11-27T13:31:21.954573Z botorch_kernel: iter 59 tested=720/1224 -> suggest
+2025-11-27T13:31:54.106065Z botorch_kernel: iter 59 evaluating batch=12 suggest_s=32.151
+2025-11-27T13:32:05.237215Z botorch_kernel: iter 59 finished eval batch tested=732/1224 eval_s=11.131
+2025-11-27T13:32:05.259378Z botorch_kernel: iter 60 tested=732/1224 -> suggest
+2025-11-27T13:32:31.938421Z botorch_kernel: iter 60 evaluating batch=12 suggest_s=26.679
+2025-11-27T13:32:42.852872Z botorch_kernel: iter 60 finished eval batch tested=744/1224 eval_s=10.914
+2025-11-27T13:32:42.871216Z botorch_kernel: iter 61 tested=744/1224 -> suggest
+2025-11-27T13:33:27.283721Z botorch_kernel: iter 61 evaluating batch=12 suggest_s=44.412
+2025-11-27T13:33:38.197682Z botorch_kernel: iter 61 finished eval batch tested=756/1224 eval_s=10.914
+2025-11-27T13:33:38.216835Z botorch_kernel: iter 62 tested=756/1224 -> suggest
+2025-11-27T13:34:18.334375Z botorch_kernel: iter 62 evaluating batch=12 suggest_s=40.117
+2025-11-27T13:34:29.095676Z botorch_kernel: iter 62 finished eval batch tested=768/1224 eval_s=10.761
+2025-11-27T13:34:29.117183Z botorch_kernel: iter 63 tested=768/1224 -> suggest
+2025-11-27T13:34:56.105925Z botorch_kernel: iter 63 evaluating batch=12 suggest_s=26.989
+2025-11-27T13:35:07.544134Z botorch_kernel: iter 63 finished eval batch tested=780/1224 eval_s=11.438
+2025-11-27T13:35:07.564642Z botorch_kernel: iter 64 tested=780/1224 -> suggest
+2025-11-27T13:35:58.645125Z botorch_kernel: iter 64 evaluating batch=12 suggest_s=51.080
+2025-11-27T13:36:10.005812Z botorch_kernel: iter 64 finished eval batch tested=792/1224 eval_s=11.361
+2025-11-27T13:36:10.026749Z botorch_kernel: iter 65 tested=792/1224 -> suggest
+2025-11-27T13:37:08.602287Z botorch_kernel: iter 65 evaluating batch=12 suggest_s=58.575
+2025-11-27T13:37:19.589196Z botorch_kernel: iter 65 finished eval batch tested=804/1224 eval_s=10.987
+2025-11-27T13:37:19.608431Z botorch_kernel: iter 66 tested=804/1224 -> suggest
+2025-11-27T13:38:11.101950Z botorch_kernel: iter 66 evaluating batch=12 suggest_s=51.493
+2025-11-27T13:38:22.158554Z botorch_kernel: iter 66 finished eval batch tested=816/1224 eval_s=11.057
+2025-11-27T13:38:22.180385Z botorch_kernel: iter 67 tested=816/1224 -> suggest
+2025-11-27T13:39:13.201402Z botorch_kernel: iter 67 evaluating batch=12 suggest_s=51.021
+2025-11-27T13:39:24.275228Z botorch_kernel: iter 67 finished eval batch tested=828/1224 eval_s=11.074
+2025-11-27T13:39:24.295727Z botorch_kernel: iter 68 tested=828/1224 -> suggest
+2025-11-27T13:40:13.045794Z botorch_kernel: iter 68 evaluating batch=12 suggest_s=48.750
+2025-11-27T13:40:23.946642Z botorch_kernel: iter 68 finished eval batch tested=840/1224 eval_s=10.901
+2025-11-27T13:40:23.968201Z botorch_kernel: iter 69 tested=840/1224 -> suggest
+2025-11-27T13:41:00.321580Z botorch_kernel: iter 69 evaluating batch=12 suggest_s=36.353
+2025-11-27T13:41:11.232865Z botorch_kernel: iter 69 finished eval batch tested=852/1224 eval_s=10.911
+2025-11-27T13:41:11.254711Z botorch_kernel: iter 70 tested=852/1224 -> suggest
+2025-11-27T13:41:46.948453Z botorch_kernel: iter 70 evaluating batch=12 suggest_s=35.694
+2025-11-27T13:41:57.995655Z botorch_kernel: iter 70 finished eval batch tested=864/1224 eval_s=11.047
+2025-11-27T13:41:58.013743Z botorch_kernel: iter 71 tested=864/1224 -> suggest
+2025-11-27T13:42:41.746797Z botorch_kernel: iter 71 evaluating batch=12 suggest_s=43.733
+2025-11-27T13:42:52.937236Z botorch_kernel: iter 71 finished eval batch tested=876/1224 eval_s=11.190
+2025-11-27T13:42:52.957888Z botorch_kernel: iter 72 tested=876/1224 -> suggest
+2025-11-27T13:43:42.344572Z botorch_kernel: iter 72 evaluating batch=12 suggest_s=49.387
+2025-11-27T13:43:54.091369Z botorch_kernel: iter 72 finished eval batch tested=888/1224 eval_s=11.747
+2025-11-27T13:43:54.121230Z botorch_kernel: iter 73 tested=888/1224 -> suggest
+2025-11-27T13:44:54.040723Z botorch_kernel: iter 73 evaluating batch=12 suggest_s=59.919
+2025-11-27T13:45:05.793746Z botorch_kernel: iter 73 finished eval batch tested=900/1224 eval_s=11.752
+2025-11-27T13:45:05.835570Z botorch_kernel: iter 74 tested=900/1224 -> suggest
+2025-11-27T13:46:09.294453Z botorch_kernel: iter 74 evaluating batch=12 suggest_s=63.459
+2025-11-27T13:46:20.681353Z botorch_kernel: iter 74 finished eval batch tested=912/1224 eval_s=11.387
+2025-11-27T13:46:20.708258Z botorch_kernel: iter 75 tested=912/1224 -> suggest
+2025-11-27T13:46:55.163126Z botorch_kernel: iter 75 evaluating batch=12 suggest_s=34.455
+2025-11-27T13:47:06.075461Z botorch_kernel: iter 75 finished eval batch tested=924/1224 eval_s=10.912
+2025-11-27T13:47:06.099582Z botorch_kernel: iter 76 tested=924/1224 -> suggest
+2025-11-27T13:47:45.793773Z botorch_kernel: iter 76 evaluating batch=12 suggest_s=39.694
+2025-11-27T13:47:56.613579Z botorch_kernel: iter 76 finished eval batch tested=936/1224 eval_s=10.820
+2025-11-27T13:47:56.630923Z botorch_kernel: iter 77 tested=936/1224 -> suggest
+2025-11-27T13:49:18.827407Z botorch_kernel: iter 77 evaluating batch=12 suggest_s=82.196
+2025-11-27T13:49:32.289814Z botorch_kernel: iter 77 finished eval batch tested=948/1224 eval_s=13.462
+2025-11-27T13:49:32.337404Z botorch_kernel: iter 78 tested=948/1224 -> suggest
+2025-11-27T13:50:36.676516Z botorch_kernel: iter 78 evaluating batch=12 suggest_s=64.339
+2025-11-27T13:50:47.622863Z botorch_kernel: iter 78 finished eval batch tested=960/1224 eval_s=10.946
+2025-11-27T13:50:47.643632Z botorch_kernel: iter 79 tested=960/1224 -> suggest
+2025-11-27T13:51:17.094660Z botorch_kernel: iter 79 evaluating batch=12 suggest_s=29.451
+2025-11-27T13:51:28.076613Z botorch_kernel: iter 79 finished eval batch tested=972/1224 eval_s=10.982
+2025-11-27T13:51:28.101718Z botorch_kernel: iter 80 tested=972/1224 -> suggest
+2025-11-27T13:52:16.385628Z botorch_kernel: iter 80 evaluating batch=12 suggest_s=48.284
+2025-11-27T13:52:27.287761Z botorch_kernel: iter 80 finished eval batch tested=984/1224 eval_s=10.902
+2025-11-27T13:52:27.311932Z botorch_kernel: iter 81 tested=984/1224 -> suggest
+2025-11-27T13:52:55.483420Z botorch_kernel: iter 81 evaluating batch=12 suggest_s=28.171
+2025-11-27T13:53:06.717010Z botorch_kernel: iter 81 finished eval batch tested=996/1224 eval_s=11.233
+2025-11-27T13:53:06.737966Z botorch_kernel: iter 82 tested=996/1224 -> suggest
+2025-11-27T13:53:29.366521Z botorch_kernel: iter 82 evaluating batch=12 suggest_s=22.628
+2025-11-27T13:53:40.251210Z botorch_kernel: iter 82 finished eval batch tested=1008/1224 eval_s=10.884
+2025-11-27T13:53:40.268055Z botorch_kernel: iter 83 tested=1008/1224 -> suggest
+2025-11-27T13:54:15.431868Z botorch_kernel: iter 83 evaluating batch=12 suggest_s=35.164
+2025-11-27T13:54:26.351396Z botorch_kernel: iter 83 finished eval batch tested=1020/1224 eval_s=10.919
+2025-11-27T13:54:26.371441Z botorch_kernel: iter 84 tested=1020/1224 -> suggest
+2025-11-27T13:55:34.392884Z botorch_kernel: iter 84 evaluating batch=12 suggest_s=68.021
+2025-11-27T13:55:45.430708Z botorch_kernel: iter 84 finished eval batch tested=1032/1224 eval_s=11.038
+2025-11-27T13:55:45.449453Z botorch_kernel: iter 85 tested=1032/1224 -> suggest
+2025-11-27T13:56:39.809494Z botorch_kernel: iter 85 evaluating batch=12 suggest_s=54.360
+2025-11-27T13:56:50.942701Z botorch_kernel: iter 85 finished eval batch tested=1044/1224 eval_s=11.133
+2025-11-27T13:56:50.966491Z botorch_kernel: iter 86 tested=1044/1224 -> suggest
+2025-11-27T13:58:03.008382Z botorch_kernel: iter 86 evaluating batch=12 suggest_s=72.042
+2025-11-27T13:58:14.304730Z botorch_kernel: iter 86 finished eval batch tested=1056/1224 eval_s=11.295
+2025-11-27T13:58:14.340554Z botorch_kernel: iter 87 tested=1056/1224 -> suggest
+2025-11-27T13:59:29.420432Z botorch_kernel: iter 87 evaluating batch=12 suggest_s=75.079
+2025-11-27T13:59:40.741266Z botorch_kernel: iter 87 finished eval batch tested=1068/1224 eval_s=11.320
+2025-11-27T13:59:40.775586Z botorch_kernel: iter 88 tested=1068/1224 -> suggest
+2025-11-27T14:00:33.161404Z botorch_kernel: iter 88 evaluating batch=12 suggest_s=52.386
+2025-11-27T14:00:44.283195Z botorch_kernel: iter 88 finished eval batch tested=1080/1224 eval_s=11.121
+2025-11-27T14:00:44.307396Z botorch_kernel: iter 89 tested=1080/1224 -> suggest
+2025-11-27T14:01:18.553798Z botorch_kernel: iter 89 evaluating batch=12 suggest_s=34.246
+2025-11-27T14:01:29.700327Z botorch_kernel: iter 89 finished eval batch tested=1092/1224 eval_s=11.146
+2025-11-27T14:01:29.724976Z botorch_kernel: iter 90 tested=1092/1224 -> suggest
+2025-11-27T14:02:35.086560Z botorch_kernel: iter 90 evaluating batch=12 suggest_s=65.361
+2025-11-27T14:02:46.336683Z botorch_kernel: iter 90 finished eval batch tested=1104/1224 eval_s=11.249
+2025-11-27T14:02:46.391651Z botorch_kernel: iter 91 tested=1104/1224 -> suggest
+2025-11-27T14:04:16.352182Z botorch_kernel: iter 91 evaluating batch=12 suggest_s=89.960
+2025-11-27T14:04:27.420019Z botorch_kernel: iter 91 finished eval batch tested=1116/1224 eval_s=11.067
+2025-11-27T14:04:27.444119Z botorch_kernel: iter 92 tested=1116/1224 -> suggest
+2025-11-27T14:06:54.687240Z botorch_kernel: iter 92 evaluating batch=12 suggest_s=147.242
+2025-11-27T14:07:05.734714Z botorch_kernel: iter 92 finished eval batch tested=1128/1224 eval_s=11.046
+2025-11-27T14:07:05.767801Z botorch_kernel: iter 93 tested=1128/1224 -> suggest
+2025-11-27T14:07:16.810984Z botorch_kernel: iter 93 evaluating batch=12 suggest_s=11.043
+2025-11-27T14:07:27.735919Z botorch_kernel: iter 93 finished eval batch tested=1140/1224 eval_s=10.925
+2025-11-27T14:07:27.754873Z botorch_kernel: iter 94 tested=1140/1224 -> suggest
+2025-11-27T14:09:33.515082Z botorch_kernel: iter 94 evaluating batch=12 suggest_s=125.760
+2025-11-27T14:09:44.979947Z botorch_kernel: iter 94 finished eval batch tested=1152/1224 eval_s=11.464
+2025-11-27T14:09:45.017366Z botorch_kernel: iter 95 tested=1152/1224 -> suggest
+2025-11-27T14:10:56.999648Z botorch_kernel: iter 95 evaluating batch=12 suggest_s=71.982
+2025-11-27T14:11:08.127259Z botorch_kernel: iter 95 finished eval batch tested=1164/1224 eval_s=11.127
+2025-11-27T14:11:08.153180Z botorch_kernel: iter 96 tested=1164/1224 -> suggest
+2025-11-27T14:13:05.026651Z botorch_kernel: iter 96 evaluating batch=12 suggest_s=116.873
+2025-11-27T14:13:16.140602Z botorch_kernel: iter 96 finished eval batch tested=1176/1224 eval_s=11.114
+2025-11-27T14:13:16.162630Z botorch_kernel: iter 97 tested=1176/1224 -> suggest
+2025-11-27T14:14:10.909053Z botorch_kernel: iter 97 evaluating batch=12 suggest_s=54.746
+2025-11-27T14:14:21.817873Z botorch_kernel: iter 97 finished eval batch tested=1188/1224 eval_s=10.908
+2025-11-27T14:14:21.838095Z botorch_kernel: iter 98 tested=1188/1224 -> suggest
+2025-11-27T14:15:40.681919Z botorch_kernel: iter 98 evaluating batch=12 suggest_s=78.844
+2025-11-27T14:15:51.628094Z botorch_kernel: iter 98 finished eval batch tested=1200/1224 eval_s=10.946
+2025-11-27T14:15:51.648295Z botorch_kernel: iter 99 tested=1200/1224 -> suggest
+2025-11-27T14:18:25.266409Z botorch_kernel: iter 99 evaluating batch=12 suggest_s=153.618
+2025-11-27T14:18:36.476893Z botorch_kernel: iter 99 finished eval batch tested=1212/1224 eval_s=11.210
+2025-11-27T14:18:36.503640Z botorch_kernel: iter 100 tested=1212/1224 -> suggest
+2025-11-27T14:20:21.573066Z botorch_kernel: iter 100 evaluating batch=12 suggest_s=105.069
+2025-11-27T14:20:33.043244Z botorch_kernel: iter 100 finished eval batch tested=1224/1224 eval_s=11.470

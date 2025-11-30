@@ -65,10 +65,10 @@ let%test_unit "multi_engine keeps per-instrument costs isolated" =
   in
 
   let strat_a : EV2.pure_strategy =
-    { _id = "instrA"; env = make_env ~cost:cost_a ~qty:1.0; build_setups = None; strategy = (module Strat_a) }
+    { _id = "instrA"; env = make_env ~cost:cost_a ~qty:1.0; build_setups = None; build_setups_stream = None; strategy = (module Strat_a) }
   in
   let strat_b : EV2.pure_strategy =
-    { _id = "instrB"; env = make_env ~cost:cost_b ~qty:1.0; build_setups = None; strategy = (module Strat_b) }
+    { _id = "instrB"; env = make_env ~cost:cost_b ~qty:1.0; build_setups = None; build_setups_stream = None; strategy = (module Strat_b) }
   in
 
   let module Stream = struct
@@ -122,10 +122,10 @@ let%test_unit "run_shared_with_stream calls make_setups per strategy and shares 
   in
 
   let strat_a : EV2.pure_strategy =
-    { _id = "sa"; env = make_env ~cost:(base_cost 0.25 12.5) ~qty:1.0; build_setups = None; strategy = (module Strat_a) }
+    { _id = "sa"; env = make_env ~cost:(base_cost 0.25 12.5) ~qty:1.0; build_setups = None; build_setups_stream = None; strategy = (module Strat_a) }
   in
   let strat_b : EV2.pure_strategy =
-    { _id = "sb"; env = make_env ~cost:(base_cost 0.1 5.0) ~qty:2.0; build_setups = None; strategy = (module Strat_b) }
+    { _id = "sb"; env = make_env ~cost:(base_cost 0.1 5.0) ~qty:2.0; build_setups = None; build_setups_stream = None; strategy = (module Strat_b) }
   in
 
   let results =

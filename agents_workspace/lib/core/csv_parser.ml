@@ -24,7 +24,30 @@ let parse_bar_1m line : bar_1m =
       parse et_ts open_s high_s low_s close_s volume_s
   | [ ts_event; _rtype; _publisher_id; _instr_id;
       open_s; high_s; low_s; close_s; volume_s; _symbol ] ->
-      parse ts_event open_s high_s low_s close_s volume_s
+      (* ts_event may be RFC3339 with optional fractional seconds; strip the fractional
+         part to keep [parse_timestamp] happy (it rejects fractions). *)
+      let ts_clean =
+        match String.lsplit2 ts_event ~on:'.' with
+        | Some (prefix, _rest) ->
+            if String.is_suffix ts_event ~suffix:"Z"
+            then prefix ^ "Z"
+            else prefix
+        | None -> ts_event
+      in
+      parse ts_clean open_s high_s low_s close_s volume_s
+  | [ ts_event; _rtype; _publisher_id; _instr_id;
+      open_s; high_s; low_s; close_s; volume_s ] ->
+      (* Raw MDP3 OHLCV without symbol/ET_datetime (e.g. GC), ts_event has nanosecond
+         precision and a 'Z' suffix. Strip fractional seconds before parsing. *)
+      let ts_clean =
+        match String.lsplit2 ts_event ~on:'.' with
+        | Some (prefix, _rest) ->
+            if String.is_suffix ts_event ~suffix:"Z"
+            then prefix ^ "Z"
+            else prefix
+        | None -> ts_event
+      in
+      parse ts_clean open_s high_s low_s close_s volume_s
   | _ ->
       failwith ("Malformed CSV line: " ^ line)
 

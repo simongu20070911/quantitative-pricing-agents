@@ -40,8 +40,23 @@
  (preprocess (pps ppx_jane)))
 
 (executable
+(name b1b2_stream_report)
+(modules b1b2_stream_report)
+(public_name b1b2_stream_report)
+(libraries core strategy_fast)
+(preprocess (pps ppx_jane)))
+
+
+(executable
  (name vwap_lhs_probe)
  (modules vwap_lhs_probe)
  (public_name vwap_lhs_probe)
  (libraries core strategy_fast yojson)
+ (preprocess (pps ppx_jane)))
+
+(executable
+ (name ml_export_main)
+ (modules ml_export_main)
+ (public_name ml_export)
+ (libraries core core_unix strategy_fast)
  (preprocess (pps ppx_jane)))

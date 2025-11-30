@@ -1,0 +1,26 @@
+{"event":"kernel","ts":"2025-11-27T10:10:09.402492Z","msg":"2025-11-27T10:10:09.402437Z botorch_kernel: warmup_start init_samples=24 shared_stream=true batch_size=4 max_evals=100"}
+{"event":"kernel","ts":"2025-11-27T10:10:26.994568Z","msg":"2025-11-27T10:10:26.994433Z botorch_kernel: warmup_done tested=24 warmup_s=17.592"}
+{"event":"kernel","ts":"2025-11-27T10:10:27.019086Z","msg":"2025-11-27T10:10:27.019066Z botorch_kernel: iter 1 tested=24/100 -> suggest"}
+{"event":"kernel","ts":"2025-11-27T10:10:28.724729Z","msg":"2025-11-27T10:10:28.724710Z botorch_kernel: iter 1 evaluating batch=12 suggest_s=1.706"}
+{"event":"kernel","ts":"2025-11-27T10:10:40.034763Z","msg":"2025-11-27T10:10:40.034707Z botorch_kernel: iter 1 finished eval batch tested=36/100 eval_s=11.310"}
+{"event":"kernel","ts":"2025-11-27T10:10:40.034782Z","msg":"2025-11-27T10:10:40.034777Z botorch_kernel: iter 1 new_best=0.0010 after 36 evals"}
+{"event":"kernel","ts":"2025-11-27T10:10:40.049968Z","msg":"2025-11-27T10:10:40.049947Z botorch_kernel: iter 2 tested=36/100 -> suggest"}
+{"event":"kernel","ts":"2025-11-27T10:10:43.615433Z","msg":"2025-11-27T10:10:43.615411Z botorch_kernel: iter 2 evaluating batch=12 suggest_s=3.565"}
+{"event":"kernel","ts":"2025-11-27T10:10:55.119608Z","msg":"2025-11-27T10:10:55.119554Z botorch_kernel: iter 2 finished eval batch tested=48/100 eval_s=11.504"}
+{"event":"kernel","ts":"2025-11-27T10:10:55.134176Z","msg":"2025-11-27T10:10:55.134156Z botorch_kernel: iter 3 tested=48/100 -> suggest"}
+{"event":"kernel","ts":"2025-11-27T10:10:58.884788Z","msg":"2025-11-27T10:10:58.884766Z botorch_kernel: iter 3 evaluating batch=12 suggest_s=3.751"}
+{"event":"kernel","ts":"2025-11-27T10:11:10.368469Z","msg":"2025-11-27T10:11:10.368413Z botorch_kernel: iter 3 finished eval batch tested=60/100 eval_s=11.484"}
+{"event":"kernel","ts":"2025-11-27T10:11:10.368489Z","msg":"2025-11-27T10:11:10.368483Z botorch_kernel: iter 3 new_best=0.0232 after 60 evals"}
+{"event":"kernel","ts":"2025-11-27T10:11:10.383690Z","msg":"2025-11-27T10:11:10.383671Z botorch_kernel: iter 4 tested=60/100 -> suggest"}
+{"event":"kernel","ts":"2025-11-27T10:11:15.324868Z","msg":"2025-11-27T10:11:15.324845Z botorch_kernel: iter 4 evaluating batch=12 suggest_s=4.941"}
+{"event":"kernel","ts":"2025-11-27T10:11:26.576664Z","msg":"2025-11-27T10:11:26.576603Z botorch_kernel: iter 4 finished eval batch tested=72/100 eval_s=11.252"}
+{"event":"kernel","ts":"2025-11-27T10:11:26.591609Z","msg":"2025-11-27T10:11:26.591587Z botorch_kernel: iter 5 tested=72/100 -> suggest"}
+{"event":"kernel","ts":"2025-11-27T10:11:29.555598Z","msg":"2025-11-27T10:11:29.555575Z botorch_kernel: iter 5 evaluating batch=12 suggest_s=2.964"}
+{"event":"kernel","ts":"2025-11-27T10:11:41.018236Z","msg":"2025-11-27T10:11:41.018184Z botorch_kernel: iter 5 finished eval batch tested=84/100 eval_s=11.463"}
+{"event":"kernel","ts":"2025-11-27T10:11:41.033209Z","msg":"2025-11-27T10:11:41.033190Z botorch_kernel: iter 6 tested=84/100 -> suggest"}
+{"event":"kernel","ts":"2025-11-27T10:11:49.041709Z","msg":"2025-11-27T10:11:49.041685Z botorch_kernel: iter 6 evaluating batch=12 suggest_s=8.008"}
+{"event":"kernel","ts":"2025-11-27T10:12:00.723477Z","msg":"2025-11-27T10:12:00.723409Z botorch_kernel: iter 6 finished eval batch tested=96/100 eval_s=11.682"}
+{"event":"kernel","ts":"2025-11-27T10:12:00.738135Z","msg":"2025-11-27T10:12:00.738115Z botorch_kernel: iter 7 tested=96/100 -> suggest"}
+{"event":"kernel","ts":"2025-11-27T10:12:03.737207Z","msg":"2025-11-27T10:12:03.737185Z botorch_kernel: iter 7 evaluating batch=4 suggest_s=2.999"}
+{"event":"kernel","ts":"2025-11-27T10:12:10.992716Z","msg":"2025-11-27T10:12:10.992659Z botorch_kernel: iter 7 finished eval batch tested=100/100 eval_s=7.255"}
+{"event":"kernel","ts":"2025-11-27T10:12:10.992736Z","msg":"2025-11-27T10:12:10.992730Z botorch_kernel: iter 7 new_best=0.0648 after 100 evals"}

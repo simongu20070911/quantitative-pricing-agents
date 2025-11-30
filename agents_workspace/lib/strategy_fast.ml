@@ -6,6 +6,7 @@ module Csv_parser = Csv_parser
 module Summary = Summary
 module Parameters = Parameters
 module Guardrails = Guardrails
+module Amplitude_labeler = Amplitude_labeler
 module Execution_params = Execution_params
 module Execution_model = Execution_model
 module Trade_base = Trade_base
@@ -17,6 +18,11 @@ module Features = struct
   module Indicators = Indicators
   module Features = Features
 end
+
+module Pattern_types = Pattern_types
+module Patterns = Patterns
+module Gap_patterns = Gap_patterns
+module Context = Context
 
 module Core = struct
   module Position_sizing = Position_sizing
@@ -35,6 +41,9 @@ module Engine = struct
   module Robustness = Robustness
   module Optimizer = Optimizer
   module Optimizer_shared = Optimizer_shared
+  module Botorch_kernel = Botorch_kernel
+  module Botorch_client = Botorch_client
+  module Objectives = Objectives
 end
 
 module Plot = struct

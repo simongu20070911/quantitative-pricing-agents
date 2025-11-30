@@ -169,6 +169,10 @@ let make_pure_strategy cfg =
   let module S = Intent(struct let cfg = cfg end) in
   SC.Strategy_builder.make_pure ~id:strategy_id ~env
     ~build_setups:(SC.Setups.with_params ~params:cfg.params.setup Setup_builder.build)
+    ~build_setups_stream:(fun () ->
+      let streamer = Setup_builder.Streaming.create cfg.params.setup in
+      { Engine_types.on_bar = (fun bar -> Setup_builder.Streaming.on_bar streamer bar);
+        finalize = (fun () -> Setup_builder.Streaming.finalize streamer) })
     (module S)
 
 let strategy_pure = make_pure_strategy default_config

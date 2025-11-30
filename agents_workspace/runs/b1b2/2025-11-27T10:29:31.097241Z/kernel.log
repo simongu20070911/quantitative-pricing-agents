@@ -1,0 +1,24 @@
+2025-11-27T10:29:31.127565Z botorch_kernel: warmup_start init_samples=24 shared_stream=true batch_size=4 max_evals=100
+2025-11-27T10:29:48.479850Z botorch_kernel: warmup_done tested=24 warmup_s=17.352
+2025-11-27T10:29:48.503783Z botorch_kernel: iter 1 tested=24/100 -> suggest
+2025-11-27T10:29:50.639589Z botorch_kernel: iter 1 evaluating batch=12 suggest_s=2.136
+2025-11-27T10:30:02.257041Z botorch_kernel: iter 1 finished eval batch tested=36/100 eval_s=11.617
+2025-11-27T10:30:02.279988Z botorch_kernel: iter 2 tested=36/100 -> suggest
+2025-11-27T10:30:06.009315Z botorch_kernel: iter 2 evaluating batch=12 suggest_s=3.729
+2025-11-27T10:30:17.450142Z botorch_kernel: iter 2 finished eval batch tested=48/100 eval_s=11.441
+2025-11-27T10:30:17.469012Z botorch_kernel: iter 3 tested=48/100 -> suggest
+2025-11-27T10:30:19.716202Z botorch_kernel: iter 3 evaluating batch=12 suggest_s=2.247
+2025-11-27T10:30:31.299685Z botorch_kernel: iter 3 finished eval batch tested=60/100 eval_s=11.583
+2025-11-27T10:30:31.300227Z botorch_kernel: iter 3 new_best=-0.0131 after 60 evals
+2025-11-27T10:30:31.322322Z botorch_kernel: iter 4 tested=60/100 -> suggest
+2025-11-27T10:30:35.530248Z botorch_kernel: iter 4 evaluating batch=12 suggest_s=4.208
+2025-11-27T10:30:46.899844Z botorch_kernel: iter 4 finished eval batch tested=72/100 eval_s=11.370
+2025-11-27T10:30:46.915254Z botorch_kernel: iter 5 tested=72/100 -> suggest
+2025-11-27T10:30:50.911707Z botorch_kernel: iter 5 evaluating batch=12 suggest_s=3.996
+2025-11-27T10:31:02.119257Z botorch_kernel: iter 5 finished eval batch tested=84/100 eval_s=11.208
+2025-11-27T10:31:02.135369Z botorch_kernel: iter 6 tested=84/100 -> suggest
+2025-11-27T10:31:05.675375Z botorch_kernel: iter 6 evaluating batch=12 suggest_s=3.540
+2025-11-27T10:31:16.962314Z botorch_kernel: iter 6 finished eval batch tested=96/100 eval_s=11.287
+2025-11-27T10:31:16.962394Z botorch_kernel: iter 6 new_best=-0.0032 after 96 evals
+2025-11-27T10:31:16.976812Z botorch_kernel: iter 7 tested=96/100 -> suggest
+2025-11-27T10:31:21.739646Z botorch_kernel: iter 7 evaluating batch=4 suggest_s=4.763

@@ -1,0 +1,23 @@
+{
+  "strategy": "b1b2",
+  "data": "/Users/simongu/Documents/Library_QPA/QPA/es.c.0-20100606-20251116.et.ohlcv-1m.csv",
+  "search": {
+    "type": "botorch",
+    "batch_size": 4,
+    "n_regions": 3,
+    "max_evals": 1224,
+    "init_samples": 24,
+    "shared_stream": true,
+    "seed": 42,
+    "host": "127.0.0.1",
+    "port": 10001,
+    "min_trades": 200
+  },
+  "objective": "t_stat_mean_trade",
+  "perm_reps": 0,
+  "bootstrap_reps": 0,
+  "robustness": { "bumps": [0.8, 0.9, 1.1, 1.2] },
+  "cache": false,
+  "save_steps": true,
+  "step_stride": 10
+}

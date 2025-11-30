@@ -6,6 +6,9 @@ type objective =
   | Sharpe
   | Mean_pnl
   | Hit_rate
+  | Year_sharpe of { lambda : float; min_days : int }
+  | Simon_ratio of { lambda : float }
+  | Mean_trade_lcb of { confidence : float } (* one-sided lower confidence bound on mean trade pnl_R *)
   | Custom of (Types.trade list -> float)
 
 type search =
@@ -42,6 +45,50 @@ type result = {
   guardrails_hash : string;
 }
 
+(* --- Stats helpers --- *)
+
+let norm_ppf p =
+  (* Acklam's approximation for inverse normal CDF; max error ~4.5e-4 *)
+  let a = [| -3.969683028665376e+01; 2.209460984245205e+02; -2.759285104469687e+02;
+             1.383577518672690e+02; -3.066479806614716e+01; 2.506628277459239e+00 |] in
+  let b = [| -5.447609879822406e+01; 1.615858368580409e+02; -1.556989798598866e+02;
+             6.680131188771972e+01; -1.328068155288572e+01 |] in
+  let c = [| -7.784894002430293e-03; -3.223964580411365e-01; -2.400758277161838e+00;
+             -2.549732539343734e+00; 4.374664141464968e+00; 2.938163982698783e+00 |] in
+  let d = [| 7.784695709041462e-03; 3.224671290700398e-01; 2.445134137142996e+00;
+             3.754408661907416e+00 |] in
+  let plow = 0.02425 in
+  let phigh = 1. -. plow in
+  if Float.(p <= 0.) || Float.(p >= 1.) then invalid_arg "norm_ppf expects 0<p<1";
+  if Float.(p < plow) then
+    let q = Float.sqrt (-2. *. Float.log p) in
+    (((((c.(0)*.q +. c.(1))*.q +. c.(2))*.q +. c.(3))*.q +. c.(4))*.q +. c.(5))
+    /. ((((d.(0)*.q +. d.(1))*.q +. d.(2))*.q +. d.(3))*.q +. 1.)
+    |> fun x -> -.x
+  else if Float.(p > phigh) then
+    let q = Float.sqrt (-2. *. Float.log (1. -. p)) in
+    (((((c.(0)*.q +. c.(1))*.q +. c.(2))*.q +. c.(3))*.q +. c.(4))*.q +. c.(5))
+    /. ((((d.(0)*.q +. d.(1))*.q +. d.(2))*.q +. d.(3))*.q +. 1.)
+  else
+    let q = p -. 0.5 in
+    let r = q *. q in
+    (((((a.(0)*.r +. a.(1))*.r +. a.(2))*.r +. a.(3))*.r +. a.(4))*.r +. a.(5))*.q
+    /. (((((b.(0)*.r +. b.(1))*.r +. b.(2))*.r +. b.(3))*.r +. b.(4))*.r +. 1.)
+
+let t_critical ~p ~df =
+  (* one-sided critical value using Cornish-Fisher expansion around normal *)
+  let df = Float.max 1. df in
+  let z = norm_ppf p in
+  let v = df in
+  let z2 = z *. z in
+  let z3 = z2 *. z in
+  let z5 = z3 *. z2 in
+  let z7 = z5 *. z2 in
+  let c1 = (z3 +. z) /. (4. *. v) in
+  let c2 = (5. *. z5 +. 16. *. z3 +. 3. *. z) /. (96. *. v *. v) in
+  let c3 = (3. *. z7 +. 19. *. z5 +. 17. *. z3 -. 15. *. z) /. (384. *. v ** 3.) in
+  z +. c1 +. c2 +. c3
+
 let trades_guardrail (g : Guardrails.t) trades daily_pnl =
   let { Guardrails.min_trades; max_drawdown_R; _ } = g in
   let trade_count = List.length trades in
@@ -64,27 +111,91 @@ let trades_guardrail (g : Guardrails.t) trades daily_pnl =
 let capacity_guardrail (_g : Guardrails.t) (_trades : trade list) = true
 
 let pvalue_guardrail (g : Guardrails.t) ?reps trades =
-  let pnls = List.map trades ~f:(fun t -> t.pnl_R) in
-  match pnls with
-  | [] -> false
-  | _ ->
+  match reps with
+  | None -> true
+  | Some r when r <= 0 -> true
+  | Some _ ->
+      let pnls = List.map trades ~f:(fun t -> t.pnl_R) in
       let mean xs =
         List.sum (module Float) xs ~f:Fun.id /. Float.of_int (List.length xs)
       in
-      let p =
-        Stat_tests.permutation_pvalue ?reps ~metric:mean pnls
-      in
+      let p = Stat_tests.permutation_pvalue ?reps ~metric:mean pnls in
       Float.(p <= g.pvalue_threshold)
 
 let bootstrap_guardrail (g : Guardrails.t) ?reps trades =
-  let pnls = List.map trades ~f:(fun t -> t.pnl_R) in
-  match pnls with
-  | [] -> false
-  | _ ->
+  match reps with
+  | None -> true
+  | Some r when r <= 0 -> true
+  | Some _ ->
+      let pnls = List.map trades ~f:(fun t -> t.pnl_R) in
       let lower, _ = Stat_tests.bootstrap_ci ?reps pnls in
       Float.(lower >= g.bootstrap_ci_target)
 
-let metric_of_objective objective trades =
+let year_sharpe_score ~lambda ~min_days ~trades_count (daily : (Date.t * float) list) =
+  (* Soft coverage weighting + shrinkage to avoid brittle zero-score. *)
+  let target_years = 3. in
+  let target_days = 200. in
+  let shrink_n = min_days in
+  let per_year = Int.Table.create () in
+  List.iter daily ~f:(fun (d, pnl) ->
+      Hashtbl.add_multi per_year ~key:(Date.year d) ~data:pnl);
+  let total_days = Float.of_int (List.length daily) in
+  let sharpes, valid_years =
+    Hashtbl.fold per_year ~init:([], 0) ~f:(fun ~key:_ ~data (acc, vy) ->
+        let n = List.length data in
+        let len = Float.of_int (n + shrink_n) in
+        let sum = List.sum (module Float) data ~f:Fun.id in
+        let mean = sum /. len in
+        let sumsq =
+          List.sum (module Float) data ~f:(fun x -> (x -. mean) ** 2.)
+          +. Float.of_int shrink_n *. (mean ** 2.)
+        in
+        let var = sumsq /. len in
+        let sharpe = if Float.(var = 0.) then 0. else mean /. Float.sqrt var in
+        sharpe :: acc, (if n > 0 then vy + 1 else vy))
+  in
+  let coverage =
+    let year_cov = Float.min 1. (Float.of_int valid_years /. target_years) in
+    let day_cov = Float.min 1. (total_days /. target_days) in
+    year_cov *. day_cov
+  in
+  if trades_count = 0 then -5.
+  else
+    match sharpes with
+    | [] -> -5.
+    | xs ->
+        let len = Float.of_int (List.length xs) in
+        let mean = List.sum (module Float) xs ~f:Fun.id /. len in
+        let var = List.sum (module Float) xs ~f:(fun x -> (x -. mean) ** 2.) /. len in
+        let std = Float.sqrt var in
+        let raw = mean -. (lambda *. std) in
+        if Float.(coverage = 0.) then -5. else coverage *. raw
+
+let simon_ratio_score ~lambda (daily : (Date.t * float) list) =
+  match daily with
+  | [] -> -5.
+  | _ ->
+      let rec loop equity logs peaks mdd = function
+        | [] -> logs, mdd
+        | (_, pnl) :: tl ->
+            let r = pnl /. equity in
+            let eq' = equity *. (1. +. r) in
+            if Float.(eq' <= 1e-9) then logs @ [Float.log 1e-9], 1.0
+            else
+              let logs' = (Float.log (1. +. r)) :: logs in
+              let peak' = Float.max (List.hd peaks |> Option.value ~default:eq') eq' in
+              let dd = (peak' -. eq') /. peak' in
+              let mdd' = Float.max mdd dd in
+              loop eq' logs' (peak' :: peaks) mdd' tl
+      in
+      let logs, mdd = loop 1. [] [] 0. daily in
+      let t = Float.of_int (List.length logs) in
+      if Float.(t = 0.) then -5.
+      else
+        let g = List.sum (module Float) logs ~f:Fun.id /. t in
+        g -. (lambda *. mdd)
+
+let metric_of_objective objective ~trades ~daily_pnl =
   match objective with
   | Custom f -> f trades
   | Hit_rate ->
@@ -97,7 +208,7 @@ let metric_of_objective objective trades =
       /. Float.max 1. (Float.of_int (List.length trades))
   | Sharpe ->
       let pnls = List.map trades ~f:(fun t -> t.pnl_R) in
-      match pnls with
+      (match pnls with
       | [] -> 0.
       | _ ->
           let len = Float.of_int (List.length pnls) in
@@ -105,7 +216,24 @@ let metric_of_objective objective trades =
           let var =
             List.sum (module Float) pnls ~f:(fun x -> (x -. mean) ** 2.) /. len
           in
-          if Float.(var = 0.) then 0. else mean /. Float.sqrt var
+          if Float.(var = 0.) then 0. else mean /. Float.sqrt var)
+  | Year_sharpe { lambda; min_days } ->
+      year_sharpe_score ~lambda ~min_days ~trades_count:(List.length trades) daily_pnl
+  | Simon_ratio { lambda } ->
+      simon_ratio_score ~lambda daily_pnl
+  | Mean_trade_lcb { confidence } ->
+      let pnls = List.map trades ~f:(fun t -> t.pnl_R) |> Array.of_list in
+      let n = Array.length pnls in
+      if n < 2 then 0.
+      else
+        let mean = Owl_base_stats.mean pnls in
+        let std = Owl_base_stats.std pnls in
+        if Float.(std = 0.) then 0.
+        else
+          let se = std /. Float.sqrt (Float.of_int n) in
+          let df = Float.of_int (n - 1) in
+          let tcrit = t_critical ~p:confidence ~df in
+          mean -. (tcrit *. se)
 
 let sample_params specs = Parameters.default_map specs
 
@@ -159,9 +287,9 @@ let robustness_pass _cand params cand_score =
     match job.robustness_bumps with
     | None | Some [] -> true
     | Some bumps ->
-        let eval_score p =
+      let eval_score p =
           let c = eval_with_cache p in
-          metric_of_objective job.objective c.trades
+          metric_of_objective job.objective ~trades:c.trades ~daily_pnl:c.daily_pnl
         in
         let r =
           Robustness.run ~specs:job.specs ~bump_factors:bumps
@@ -185,7 +313,7 @@ let robustness_pass _cand params cand_score =
       else bootstrap_guardrail g ?reps:job.bootstrap_reps cand.trades
     in
     if passed_trades && passed_capacity && passed_perm && passed_bootstrap then (
-      let score = metric_of_objective job.objective cand.trades in
+      let score = metric_of_objective job.objective ~trades:cand.trades ~daily_pnl:cand.daily_pnl in
       if robustness_pass cand params score then Some { cand with score }
       else (incr rejected_robustness; None))
     else (incr rejected; None)
@@ -258,7 +386,7 @@ let robustness_pass _cand params cand_score =
     | None ->
         let fallback_params_v = fallback_params job.specs in
         let fallback = eval_with_cache fallback_params_v in
-        { fallback with score = metric_of_objective job.objective fallback.trades }
+        { fallback with score = metric_of_objective job.objective ~trades:fallback.trades ~daily_pnl:fallback.daily_pnl }
   in
   {
     best;

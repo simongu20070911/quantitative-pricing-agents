@@ -27,6 +27,7 @@ type t =
       strategy : (module Strategy_sig.V2 with type state = 's);
       mutable state : 's option;
       setups : setup Date.Table.t;
+      mutable initialized_with_setup : bool;
       mutable book : Order_book.t;
       mutable current_date : Date.t option;
       mutable last_session_bar : bar_1m option;
@@ -40,6 +41,7 @@ let create (strat : Engine_types.pure_strategy) ~(setups : setup Date.Table.t) :
     strategy = (module S);
     state = None;
     setups;
+    initialized_with_setup = false;
     book = Order_book.empty ();
     current_date = None;
     last_session_bar = None;
@@ -52,7 +54,10 @@ let set_date (Runner r as t) date =
   let module S = (val r.strategy) in
   let setup_opt = Hashtbl.find r.setups date in
   r.current_date <- Some date;
+  (* Always initialize strategy state, even when no per-day setup exists, so
+     setup-free strategies (e.g., ones using Setup.noop) can still run. *)
   r.state <- Some (S.init setup_opt);
+  r.initialized_with_setup <- Option.is_some setup_opt;
   r.book <- Order_book.empty ();
   r.last_session_bar <- None;
   t
@@ -62,6 +67,7 @@ let finalize_day (Runner r as t) : t =
   | None ->
       r.current_date <- None;
       r.last_session_bar <- None;
+      r.initialized_with_setup <- false;
       t
   | Some st ->
       let module S = (val r.strategy) in
@@ -99,6 +105,7 @@ let finalize_day (Runner r as t) : t =
       r.last_session_bar <- None;
       r.book <- book';
       r.acc <- acc;
+      r.initialized_with_setup <- false;
       t
 
 let step (Runner r as t) (bar : bar_1m) : t =
@@ -112,6 +119,19 @@ let step (Runner r as t) (bar : bar_1m) : t =
   let Runner r = t in
   let module S = (val r.strategy) in
   let env = r.strat.env in
+  (* Late setup injection: if we started the day with no setup but one was
+     produced mid-stream, initialize now. *)
+  (match r.state with
+   | None -> ()
+   | Some _ when not r.initialized_with_setup ->
+       (match Hashtbl.find r.setups date with
+        | None -> ()
+        | Some setup ->
+            r.state <- Some (S.init (Some setup));
+            r.book <- Order_book.empty ();
+            r.last_session_bar <- None;
+            r.initialized_with_setup <- true)
+   | Some _ -> ());
   let last_session_bar =
     if minute_of_day >= env.session_start_min
        && minute_of_day <= env.session_end_min

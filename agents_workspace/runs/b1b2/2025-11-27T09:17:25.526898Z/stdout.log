@@ -1,0 +1,6 @@
+{"event":"kernel","ts":"2025-11-27T09:17:25.542793Z","msg":"2025-11-27T09:17:25.542750Z botorch_kernel: warmup_start init_samples=12 shared_stream=true batch_size=4 max_evals=24"}
+{"event":"kernel","ts":"2025-11-27T09:17:36.820814Z","msg":"2025-11-27T09:17:36.820689Z botorch_kernel: warmup_done tested=12 warmup_s=11.278"}
+{"event":"kernel","ts":"2025-11-27T09:17:36.841815Z","msg":"2025-11-27T09:17:36.841784Z botorch_kernel: iter 1 tested=12/24 -> suggest"}
+{"event":"kernel","ts":"2025-11-27T09:17:38.231023Z","msg":"2025-11-27T09:17:38.231001Z botorch_kernel: iter 1 evaluating batch=12 suggest_s=1.389"}
+{"event":"kernel","ts":"2025-11-27T09:17:49.488300Z","msg":"2025-11-27T09:17:49.487378Z botorch_kernel: iter 1 finished eval batch tested=24/24 eval_s=11.256"}
+{"event":"kernel","ts":"2025-11-27T09:17:49.488579Z","msg":"2025-11-27T09:17:49.488569Z botorch_kernel: iter 1 new_best=-0.0003 after 24 evals"}
