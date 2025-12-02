@@ -209,11 +209,10 @@ def main():
     else:
         raise ValueError(f"Unknown symbol '{sym}'")
 
-    # Load ml export
+    # Load ml export (no label_small-based filtering to avoid look-ahead bias).
     ml = pd.read_csv(ml_path, low_memory=False)
-    # Only use rows where original label was up/down (for consistency)
-    ml = ml[ml["label_small"].isin(["up", "down"])].copy()
 
+    # Time-based split
     train_df = ml[ml["split"] == "train"].copy()
     test_df = ml[ml["split"] == "test"].copy()
 
@@ -228,37 +227,38 @@ def main():
     train_df["label_stop"] = train_labels
     test_df["label_stop"] = test_labels
 
-    # Drop None labels
-    train_df = train_df[train_df["label_stop"].isin(["up", "down"])].copy()
-    test_df = test_df[test_df["label_stop"].isin(["up", "down"])].copy()
+    # For training/evaluating the classifier, keep only bars with definitive up/down hits.
+    # Backtest will run on the FULL test_df to avoid future-based sample selection.
+    train_tb = train_df[train_df["label_stop"].isin(["up", "down"])].copy()
+    test_tb = test_df[test_df["label_stop"].isin(["up", "down"])].copy()
 
-    print("Train stop-labeled rows:", len(train_df), "Test stop-labeled rows:", len(test_df))
+    print("Train stop-labeled rows (up/down only):", len(train_tb), "Test stop-labeled rows:", len(test_tb))
 
-    train_df["y"] = (train_df["label_stop"] == "up").astype(int)
-    test_df["y"] = (test_df["label_stop"] == "up").astype(int)
+    train_tb["y"] = (train_tb["label_stop"] == "up").astype(int)
+    test_tb["y"] = (test_tb["label_stop"] == "up").astype(int)
 
-    # Build features using same pipeline
-    X_train_df, num_cols, train_cat_cols, num_means = build_features(train_df)
-    X_test_df, _, test_cat_cols, _ = build_features(test_df, num_means=num_means)
+    # Build features using same pipeline on the labeled subset
+    X_train_df, num_cols, train_cat_cols, num_means = build_features(train_tb)
+    X_test_tb_df, _, test_cat_cols, _ = build_features(test_tb, num_means=num_means)
     # align cats
     train_cat_set = set(train_cat_cols)
     test_cat_set = set(test_cat_cols)
     all_cat_cols = sorted(list(train_cat_set | test_cat_set))
 
-    def align_onehots(X_df, current_cat_cols):
+    def align_onehots(X_df):
         missing = [c for c in all_cat_cols if c not in X_df.columns]
         for c in missing:
             X_df[c] = 0.0
         cols = num_cols + all_cat_cols
         return X_df[cols]
 
-    X_train_df = align_onehots(X_train_df, train_cat_cols)
-    X_test_df = align_onehots(X_test_df, test_cat_cols)
+    X_train_df = align_onehots(X_train_df)
+    X_test_tb_df = align_onehots(X_test_tb_df)
 
     X_train = X_train_df.values.astype(np.float32)
-    X_test = X_test_df.values.astype(np.float32)
-    y_train = train_df["y"].values
-    y_test = test_df["y"].values
+    X_test_tb = X_test_tb_df.values.astype(np.float32)
+    y_train = train_tb["y"].values
+    y_test = test_tb["y"].values
 
     print("Feature shapes train/test:", X_train.shape, X_test.shape)
 
@@ -280,15 +280,21 @@ def main():
     auc_train = roc_auc_score(y_train, proba_train)
     print("HGB on stop-label train AUC:", auc_train)
 
-    proba_test = clf.predict_proba(X_test)[:, 1]
-    auc = roc_auc_score(y_test, proba_test)
-    print("HGB on stop-label test AUC:", auc)
+    proba_test_tb = clf.predict_proba(X_test_tb)[:, 1]
+    auc = roc_auc_score(y_test, proba_test_tb)
+    print("HGB on stop-label test AUC (up/down subset):", auc)
 
+    # ----- Backtest on FULL test_df (no label-based gating) -----
     # Stop-entry trading aligned with this label:
     # long-stop only (label_stop is defined for long scenario),
     # we go long when p>=0.5, short when p<0.5 and flip label.
+
+    # Build features for full test_df using same num_means/cats.
+    X_test_full_df, _, test_cat_full, _ = build_features(test_df, num_means=num_means)
+    X_test_full_df = align_onehots(X_test_full_df)
+
     test_df_sorted = test_df.sort_values(["date", "time"]).reset_index(drop=True)
-    X_test_sorted = X_test_df.loc[test_df_sorted.index].values.astype(np.float32)
+    X_test_sorted = X_test_full_df.loc[test_df_sorted.index].values.astype(np.float32)
     proba_sorted = clf.predict_proba(X_test_sorted)[:, 1]
     test_df_sorted["p_hgb_stop"] = proba_sorted
 
@@ -340,7 +346,11 @@ def main():
             if side < 0 and low[j] <= stop_price:
                 entry_idx = j
                 break
+        # If stop never fills within horizon, treat as zero-PnL attempt.
         if entry_idx is None:
+            pnls.append(0.0)
+            trade_dates.append(row["date"])
+            prob_trades.append(row["p_hgb_stop"])
             continue
         entry_price = stop_price
         up_level = entry_price + atr
@@ -365,7 +375,8 @@ def main():
             exit_price = close[last_exit_idx]
             pnl_pts = (exit_price - entry_price) * side
         elif hit_side == 0:
-            continue
+            # Ambiguous: count as zero-PnL outcome.
+            pnl_pts = 0.0
         else:
             pnl_pts = (up_level - entry_price) if hit_side == 1 else (dn_level - entry_price)
             pnl_pts *= side
