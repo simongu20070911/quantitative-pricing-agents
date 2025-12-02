@@ -98,17 +98,15 @@ def build_features(df: pd.DataFrame, num_means=None):
 
 
 def main():
-    HORIZON = 10
-
-    ml = pd.read_csv("ml_export_es_new.csv", low_memory=False)
+    # Load 3-minute export with amplitude labels
+    ml = pd.read_csv("ml_export_es_new_3m.csv", low_memory=False)
     ml = ml[ml["label_amp"].isin(["up", "down"])].copy()
+    ml["y"] = (ml["label_amp"] == "up").astype(int)
 
     train_df = ml[ml["split"] == "train"].copy()
     test_df = ml[ml["split"] == "test"].copy()
 
-    train_df["y"] = (train_df["label_amp"] == "up").astype(int)
-    test_df["y"] = (test_df["label_amp"] == "up").astype(int)
-
+    # Build features and train HGB on label_amp
     X_train_df, num_cols, train_cat_cols, num_means = build_features(train_df)
     X_test_df, _, test_cat_cols, _ = build_features(test_df, num_means=num_means)
 
@@ -131,8 +129,6 @@ def main():
     y_train = train_df["y"].values
     y_test = test_df["y"].values
 
-    print("Feature shapes train/test:", X_train.shape, X_test.shape)
-
     clf = HistGradientBoostingClassifier(
         loss="log_loss",
         max_depth=3,
@@ -146,68 +142,90 @@ def main():
     )
     clf.fit(X_train, y_train)
 
-    proba_train = clf.predict_proba(X_train)[:, 1]
-    proba_test = clf.predict_proba(X_test)[:, 1]
-    auc_train = roc_auc_score(y_train, proba_train)
-    auc_test = roc_auc_score(y_test, proba_test)
+    p_train = clf.predict_proba(X_train)[:, 1]
+    p_test = clf.predict_proba(X_test)[:, 1]
+    auc_train = roc_auc_score(y_train, p_train)
+    auc_test = roc_auc_score(y_test, p_test)
     print("Amplitude label HGB train AUC:", auc_train)
     print("Amplitude label HGB test AUC:", auc_test)
 
-    # Simple close-to-close payoff over HORIZON bars.
-    raw = pd.read_csv("../es.c.0-20100606-20251116.et.ohlcv-1m.csv")
-    raw["ET_datetime"] = pd.to_datetime(raw["ET_datetime"], utc=True)
-    raw["date_str"] = raw["ET_datetime"].dt.strftime("%Y-%m-%d")
-    raw["time_str"] = raw["ET_datetime"].dt.strftime("%H:%M")
-    raw["minute_of_day"] = raw["ET_datetime"].dt.hour * 60 + raw["ET_datetime"].dt.minute
-    rth_mask = (raw["minute_of_day"] >= 9 * 60 + 30) & (raw["minute_of_day"] <= 16 * 60 + 15)
-    raw = raw[rth_mask].reset_index(drop=True)
-
-    key_series = raw["date_str"] + " " + raw["time_str"]
-    index_map = {k: i for i, k in enumerate(key_series)}
-    close = raw["close"].values
-    date_raw = raw["date_str"].values
-
+    # Build predicted state on test (3m bars), using p_amp>=0.5 as up, <0.5 as down
     test_df_sorted = test_df.sort_values(["date", "time"]).reset_index(drop=True)
     X_test_sorted = X_test_df.loc[test_df_sorted.index].values.astype(np.float32)
-    proba_sorted = clf.predict_proba(X_test_sorted)[:, 1]
-    test_df_sorted["p_amp"] = proba_sorted
+    p_sorted = clf.predict_proba(X_test_sorted)[:, 1]
+    test_df_sorted["p_amp"] = p_sorted
 
-    pnls = []
-    dates = []
-    for _, row in test_df_sorted.iterrows():
-        key = f"{row['date']} {row['time']}"
-        i = index_map.get(key)
-        if i is None:
-            continue
-        n = len(close)
-        last_idx = min(n - 1, i + HORIZON)
-        if date_raw[last_idx] != date_raw[i]:
-            continue
-        side = 1.0 if row["p_amp"] >= 0.5 else -1.0
-        entry = close[i]
-        exit_px = close[last_idx]
-        pnl = (exit_px - entry) * side
-        pnls.append(pnl)
-        dates.append(row["date"])
+    # Map predictions to position state: +1 (long) if p>=0.5, -1 (short) if p<0.5
+    test_df_sorted["state_pred"] = np.where(test_df_sorted["p_amp"] >= 0.5, 1, -1)
 
-    pnls = np.array(pnls, dtype=float)
-    print("amp-model trades_used", len(pnls))
-    print("amp-model per-trade mean_pts", float(pnls.mean()), "std_pts", float(pnls.std()))
+    # Use export close as 3m close
+    close = pd.to_numeric(
+        test_df_sorted["close"].astype(str).str.replace("_", ""), errors="coerce"
+    ).values
+    dates = test_df_sorted["date"].values
+    states = test_df_sorted["state_pred"].values
 
-    pnl_df = pd.DataFrame({"date": dates, "pnl": pnls})
+    n = len(test_df_sorted)
+    state = 0  # 0=flat, +1=long, -1=short
+    entry_px = None
+
+    # Total per-trade cost: 0.07 fees + 1 tick (0.25)
+    COST = 0.07 + 0.25
+    trades_pnl = []
+    trades_date = []
+
+    for j in range(n):
+        d = dates[j]
+        px = close[j]
+        desired = states[j]
+
+        # On predicted sign change, close old and/or open new at this bar's close
+        if desired != state:
+            # Close existing
+            if state != 0 and entry_px is not None and np.isfinite(px) and np.isfinite(entry_px):
+                pnl = (px - entry_px) * state - COST
+                trades_pnl.append(pnl)
+                trades_date.append(d)
+            # Open new (always in) if desired != 0
+            if np.isfinite(px):
+                state = desired
+                entry_px = px
+            else:
+                state = 0
+                entry_px = None
+
+    # Close any open position at last bar
+    if state != 0 and entry_px is not None and np.isfinite(close[-1]) and np.isfinite(entry_px):
+        pnl = (close[-1] - entry_px) * state - COST
+        trades_pnl.append(pnl)
+        trades_date.append(dates[-1])
+
+    trades_pnl = np.array(trades_pnl, dtype=float)
+    print("model signflip swing-model trades_used", len(trades_pnl))
+    if len(trades_pnl) == 0:
+        print("No trades.")
+        return
+    print(
+        "model signflip swing-model per-trade mean_pts",
+        float(trades_pnl.mean()),
+        "std_pts",
+        float(trades_pnl.std()),
+    )
+
+    pnl_df = pd.DataFrame({"date": trades_date, "pnl": trades_pnl})
     pnl_df["date"] = pd.to_datetime(pnl_df["date"])
     by_day = pnl_df.groupby("date")["pnl"].sum()
     mean_daily = by_day.mean()
     std_daily = by_day.std()
     sharpe_daily = mean_daily / std_daily if std_daily > 0 else np.nan
     sharpe_annual = sharpe_daily * np.sqrt(252) if std_daily > 0 else np.nan
-    print("amp-model days_with_trades", len(by_day))
-    print("amp-model mean_daily_pts", float(mean_daily), "std_daily_pts", float(std_daily))
-    print("amp-model daily_sharpe", float(sharpe_daily), "annualized_sharpe", float(sharpe_annual))
 
-    # Per-year Sharpe
+    print("model signflip swing-model days_with_trades", len(by_day))
+    print("model signflip swing-model mean_daily_pts", float(mean_daily), "std_daily_pts", float(std_daily))
+    print("model signflip swing-model daily_sharpe", float(sharpe_daily), "annualized_sharpe", float(sharpe_annual))
+
+    print("\nPer-year Sharpe (model signflip swing-model, no cost):")
     pnl_df["year"] = pnl_df["date"].dt.year
-    print("\nPer-year Sharpe (amp-model, close-to-close horizon):")
     for year, grp in pnl_df.groupby("year"):
         by_day_y = grp.groupby("date")["pnl"].sum()
         m = by_day_y.mean()

@@ -59,3 +59,6 @@ background information:
 the US market RTH for ES is from 9:30 am to 4:15 pm ET. 
 real full data for es: /Users/simongu/Documents/Library_QPA/QPA/es.c.0-20100606-20251116.et.ohlcv-1m.csv
 in QPA/agents_workspace/.venv there are optimization python stacks. (nevergrad and botorch)
+
+for usual python analysis, use /Users/simongu/Documents/Library_QPA/python_tools/.venv/bin/python
+

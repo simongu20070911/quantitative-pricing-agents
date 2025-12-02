@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 from sklearn.ensemble import HistGradientBoostingClassifier
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import roc_auc_score, confusion_matrix
 
 
 def build_features(df: pd.DataFrame, num_means=None):
@@ -98,16 +98,16 @@ def build_features(df: pd.DataFrame, num_means=None):
 
 
 def main():
-    HORIZON = 10
-
-    ml = pd.read_csv("ml_export_es_new.csv", low_memory=False)
+    ml = pd.read_csv("ml_export_es_new_3m.csv", low_memory=False)
     ml = ml[ml["label_amp"].isin(["up", "down"])].copy()
+    ml["y"] = (ml["label_amp"] == "up").astype(int)
 
-    train_df = ml[ml["split"] == "train"].copy()
-    test_df = ml[ml["split"] == "test"].copy()
-
-    train_df["y"] = (train_df["label_amp"] == "up").astype(int)
-    test_df["y"] = (test_df["label_amp"] == "up").astype(int)
+    train_df = ml[ml["split"] == "train"].copy().sort_values(["date", "time"]).reset_index(
+        drop=True
+    )
+    test_df = ml[ml["split"] == "test"].copy().sort_values(["date", "time"]).reset_index(
+        drop=True
+    )
 
     X_train_df, num_cols, train_cat_cols, num_means = build_features(train_df)
     X_test_df, _, test_cat_cols, _ = build_features(test_df, num_means=num_means)
@@ -131,8 +131,6 @@ def main():
     y_train = train_df["y"].values
     y_test = test_df["y"].values
 
-    print("Feature shapes train/test:", X_train.shape, X_test.shape)
-
     clf = HistGradientBoostingClassifier(
         loss="log_loss",
         max_depth=3,
@@ -146,80 +144,39 @@ def main():
     )
     clf.fit(X_train, y_train)
 
-    proba_train = clf.predict_proba(X_train)[:, 1]
-    proba_test = clf.predict_proba(X_test)[:, 1]
-    auc_train = roc_auc_score(y_train, proba_train)
-    auc_test = roc_auc_score(y_test, proba_test)
-    print("Amplitude label HGB train AUC:", auc_train)
-    print("Amplitude label HGB test AUC:", auc_test)
+    p_test = clf.predict_proba(X_test)[:, 1]
+    auc_test = roc_auc_score(y_test, p_test)
+    print("HGB amplitude label test AUC:", auc_test)
 
-    # Simple close-to-close payoff over HORIZON bars.
-    raw = pd.read_csv("../es.c.0-20100606-20251116.et.ohlcv-1m.csv")
-    raw["ET_datetime"] = pd.to_datetime(raw["ET_datetime"], utc=True)
-    raw["date_str"] = raw["ET_datetime"].dt.strftime("%Y-%m-%d")
-    raw["time_str"] = raw["ET_datetime"].dt.strftime("%H:%M")
-    raw["minute_of_day"] = raw["ET_datetime"].dt.hour * 60 + raw["ET_datetime"].dt.minute
-    rth_mask = (raw["minute_of_day"] >= 9 * 60 + 30) & (raw["minute_of_day"] <= 16 * 60 + 15)
-    raw = raw[rth_mask].reset_index(drop=True)
+    y_pred = (p_test >= 0.5).astype(int)
+    cm = confusion_matrix(y_test, y_pred, labels=[0, 1])
+    tn, fp, fn, tp = cm.ravel()
+    print("Confusion matrix (down=0, up=1):")
+    print(cm)
+    acc = (tp + tn) / cm.sum()
+    print(f"Overall accuracy: {acc:.4f}")
+    print(f"TPR (recall up): {tp / (tp + fn):.4f}")
+    print(f"TNR (recall down): {tn / (tn + fp):.4f}")
 
-    key_series = raw["date_str"] + " " + raw["time_str"]
-    index_map = {k: i for i, k in enumerate(key_series)}
-    close = raw["close"].values
-    date_raw = raw["date_str"].values
+    # Persistence baseline: predict y_t = y_{t-1}
+    y_test_seq = y_test
+    same = y_test_seq[1:] == y_test_seq[:-1]
+    baseline_acc = same.mean()  # accuracy if always predict previous label
+    print(f"Persistence baseline accuracy (predict y_t=y_(t-1)): {baseline_acc:.4f}")
 
-    test_df_sorted = test_df.sort_values(["date", "time"]).reset_index(drop=True)
-    X_test_sorted = X_test_df.loc[test_df_sorted.index].values.astype(np.float32)
-    proba_sorted = clf.predict_proba(X_test_sorted)[:, 1]
-    test_df_sorted["p_amp"] = proba_sorted
-
-    pnls = []
-    dates = []
-    for _, row in test_df_sorted.iterrows():
-        key = f"{row['date']} {row['time']}"
-        i = index_map.get(key)
-        if i is None:
-            continue
-        n = len(close)
-        last_idx = min(n - 1, i + HORIZON)
-        if date_raw[last_idx] != date_raw[i]:
-            continue
-        side = 1.0 if row["p_amp"] >= 0.5 else -1.0
-        entry = close[i]
-        exit_px = close[last_idx]
-        pnl = (exit_px - entry) * side
-        pnls.append(pnl)
-        dates.append(row["date"])
-
-    pnls = np.array(pnls, dtype=float)
-    print("amp-model trades_used", len(pnls))
-    print("amp-model per-trade mean_pts", float(pnls.mean()), "std_pts", float(pnls.std()))
-
-    pnl_df = pd.DataFrame({"date": dates, "pnl": pnls})
-    pnl_df["date"] = pd.to_datetime(pnl_df["date"])
-    by_day = pnl_df.groupby("date")["pnl"].sum()
-    mean_daily = by_day.mean()
-    std_daily = by_day.std()
-    sharpe_daily = mean_daily / std_daily if std_daily > 0 else np.nan
-    sharpe_annual = sharpe_daily * np.sqrt(252) if std_daily > 0 else np.nan
-    print("amp-model days_with_trades", len(by_day))
-    print("amp-model mean_daily_pts", float(mean_daily), "std_daily_pts", float(std_daily))
-    print("amp-model daily_sharpe", float(sharpe_daily), "annualized_sharpe", float(sharpe_annual))
-
-    # Per-year Sharpe
-    pnl_df["year"] = pnl_df["date"].dt.year
-    print("\nPer-year Sharpe (amp-model, close-to-close horizon):")
-    for year, grp in pnl_df.groupby("year"):
-        by_day_y = grp.groupby("date")["pnl"].sum()
-        m = by_day_y.mean()
-        s = by_day_y.std()
-        if s > 0:
-            sd = m / s
-            sa = sd * np.sqrt(252)
-        else:
-            sd = float("nan")
-            sa = float("nan")
-        print(f"  {year}: days={len(by_day_y)}, mean_daily={m:.3f}, std_daily={s:.3f}, ann_sharpe={sa:.3f}")
+    # Accuracy conditional on no-switch vs switch
+    # For bars 1..N-1, we compare y_pred vs y_test, and look at whether y_test changed from previous.
+    y_true_sub = y_test_seq[1:]
+    y_pred_sub = y_pred[1:]
+    same_sub = same  # same length
+    acc_noswitch = (y_pred_sub[same_sub] == y_true_sub[same_sub]).mean()
+    acc_switch = (y_pred_sub[~same_sub] == y_true_sub[~same_sub]).mean()
+    frac_switch = (~same_sub).mean()
+    print(f"Fraction of switch bars: {frac_switch:.4f}")
+    print(f"Accuracy on non-switch bars: {acc_noswitch:.4f}")
+    print(f"Accuracy on switch bars: {acc_switch:.4f}")
 
 
 if __name__ == "__main__":
     main()
+

@@ -98,16 +98,19 @@ def build_features(df: pd.DataFrame, num_means=None):
 
 
 def main():
-    HORIZON = 10
+    # Strategy parameters
+    THRESH_HI = 0.65
+    THRESH_LO = 0.35
+    ALPHA = 1.0   # target = entry + ALPHA * ATR
+    BETA = 0.5    # stop   = entry - BETA  * ATR
+    HORIZON = 100  # max bars per swing (~100 minutes)
 
-    ml = pd.read_csv("ml_export_es_new.csv", low_memory=False)
+    ml = pd.read_csv("ml_export_es_new_3m.csv", low_memory=False)
     ml = ml[ml["label_amp"].isin(["up", "down"])].copy()
+    ml["y"] = (ml["label_amp"] == "up").astype(int)
 
     train_df = ml[ml["split"] == "train"].copy()
     test_df = ml[ml["split"] == "test"].copy()
-
-    train_df["y"] = (train_df["label_amp"] == "up").astype(int)
-    test_df["y"] = (test_df["label_amp"] == "up").astype(int)
 
     X_train_df, num_cols, train_cat_cols, num_means = build_features(train_df)
     X_test_df, _, test_cat_cols, _ = build_features(test_df, num_means=num_means)
@@ -146,14 +149,14 @@ def main():
     )
     clf.fit(X_train, y_train)
 
-    proba_train = clf.predict_proba(X_train)[:, 1]
-    proba_test = clf.predict_proba(X_test)[:, 1]
-    auc_train = roc_auc_score(y_train, proba_train)
-    auc_test = roc_auc_score(y_test, proba_test)
+    p_train = clf.predict_proba(X_train)[:, 1]
+    p_test = clf.predict_proba(X_test)[:, 1]
+    auc_train = roc_auc_score(y_train, p_train)
+    auc_test = roc_auc_score(y_test, p_test)
     print("Amplitude label HGB train AUC:", auc_train)
     print("Amplitude label HGB test AUC:", auc_test)
 
-    # Simple close-to-close payoff over HORIZON bars.
+    # Build predictions aligned to raw RTH bars.
     raw = pd.read_csv("../es.c.0-20100606-20251116.et.ohlcv-1m.csv")
     raw["ET_datetime"] = pd.to_datetime(raw["ET_datetime"], utc=True)
     raw["date_str"] = raw["ET_datetime"].dt.strftime("%Y-%m-%d")
@@ -162,52 +165,151 @@ def main():
     rth_mask = (raw["minute_of_day"] >= 9 * 60 + 30) & (raw["minute_of_day"] <= 16 * 60 + 15)
     raw = raw[rth_mask].reset_index(drop=True)
 
-    key_series = raw["date_str"] + " " + raw["time_str"]
-    index_map = {k: i for i, k in enumerate(key_series)}
-    close = raw["close"].values
-    date_raw = raw["date_str"].values
+    raw = raw.sort_values(["date_str", "time_str"]).reset_index(drop=True)
+    raw["key"] = raw["date_str"] + " " + raw["time_str"]
 
+    # Predictions only on test segment
     test_df_sorted = test_df.sort_values(["date", "time"]).reset_index(drop=True)
     X_test_sorted = X_test_df.loc[test_df_sorted.index].values.astype(np.float32)
-    proba_sorted = clf.predict_proba(X_test_sorted)[:, 1]
-    test_df_sorted["p_amp"] = proba_sorted
+    p_sorted = clf.predict_proba(X_test_sorted)[:, 1]
+    test_df_sorted["p_amp"] = p_sorted
 
-    pnls = []
-    dates = []
-    for _, row in test_df_sorted.iterrows():
-        key = f"{row['date']} {row['time']}"
-        i = index_map.get(key)
-        if i is None:
-            continue
-        n = len(close)
-        last_idx = min(n - 1, i + HORIZON)
-        if date_raw[last_idx] != date_raw[i]:
-            continue
-        side = 1.0 if row["p_amp"] >= 0.5 else -1.0
-        entry = close[i]
-        exit_px = close[last_idx]
-        pnl = (exit_px - entry) * side
-        pnls.append(pnl)
-        dates.append(row["date"])
+    test_df_sorted["key"] = test_df_sorted["date"] + " " + test_df_sorted["time"]
+    preds = test_df_sorted[["key", "p_amp", "atr10"]].copy()
+    # Align atr10 as numeric
+    preds["atr10"] = pd.to_numeric(preds["atr10"], errors="coerce")
 
-    pnls = np.array(pnls, dtype=float)
-    print("amp-model trades_used", len(pnls))
-    print("amp-model per-trade mean_pts", float(pnls.mean()), "std_pts", float(pnls.std()))
+    raw = raw.merge(preds, on="key", how="left")
 
-    pnl_df = pd.DataFrame({"date": dates, "pnl": pnls})
+    close = raw["close"].values
+    high = raw["high"].values
+    low = raw["low"].values
+    date_raw = raw["date_str"].values
+    p_amp = raw["p_amp"].values
+    atr10 = raw["atr10"].values
+
+    n = len(raw)
+    state = 0  # 0=flat, +1=long, -1=short
+    entry_idx = None
+    entry_px = None
+    target_px = None
+    stop_px = None
+    expiry_idx = None
+
+    trades_pnl = []
+    trades_date = []
+
+    last_date = date_raw[0] if n > 0 else None
+
+    for j in range(n):
+        d = date_raw[j]
+        px_close = close[j]
+        px_high = high[j]
+        px_low = low[j]
+
+        # If day changed, we don't force exit; swings can cross days.
+
+        # Manage open position: check target/stop/horizon
+        if state != 0 and entry_idx is not None:
+            hit = False
+            pnl = None
+            # Horizon expiry
+            if expiry_idx is not None and j >= expiry_idx:
+                pnl = (px_close - entry_px) * state
+                hit = True
+            else:
+                if state > 0:
+                    hit_target = target_px is not None and px_high >= target_px
+                    hit_stop = stop_px is not None and px_low <= stop_px
+                else:
+                    hit_target = target_px is not None and px_low <= target_px
+                    hit_stop = stop_px is not None and px_high >= stop_px
+                if hit_target and not hit_stop:
+                    pnl = (target_px - entry_px) * state
+                    hit = True
+                elif hit_stop and not hit_target:
+                    pnl = (stop_px - entry_px) * state
+                    hit = True
+                elif hit_target and hit_stop:
+                    # Ambiguous bar: treat as flat outcome (zero PnL) and close.
+                    pnl = 0.0
+                    hit = True
+
+            if hit:
+                trades_pnl.append(pnl)
+                trades_date.append(d)
+                state = 0
+                entry_idx = None
+                entry_px = None
+                target_px = None
+                stop_px = None
+                expiry_idx = None
+
+        # Determine desired state from p_amp at this bar (if available)
+        desired_state = state
+        if not np.isnan(p_amp[j]):
+            if p_amp[j] >= THRESH_HI:
+                desired_state = 1
+            elif p_amp[j] <= THRESH_LO:
+                desired_state = -1
+            # else keep current
+
+        # Handle state transitions (flip / new entry)
+        if desired_state != state:
+            # Close existing position at this bar's close if any and not already closed
+            if state != 0 and entry_px is not None:
+                pnl = (px_close - entry_px) * state
+                trades_pnl.append(pnl)
+                trades_date.append(d)
+            # Open new position if desired_state != 0 and we have a valid ATR
+            if desired_state != 0 and np.isfinite(atr10[j]) and atr10[j] is not None and atr10[j] > 0:
+                state = desired_state
+                entry_idx = j
+                entry_px = px_close
+                h = float(atr10[j])
+                if state > 0:
+                    target_px = entry_px + ALPHA * h
+                    stop_px = entry_px - BETA * h
+                else:
+                    target_px = entry_px - ALPHA * h
+                    stop_px = entry_px + BETA * h
+                expiry_idx = j + HORIZON
+            else:
+                state = 0
+                entry_idx = None
+                entry_px = None
+                target_px = None
+                stop_px = None
+                expiry_idx = None
+
+    trades_pnl = np.array(trades_pnl, dtype=float)
+    print("swing-model trades_used", len(trades_pnl))
+    if len(trades_pnl) > 0:
+        print(
+            "swing-model per-trade mean_pts",
+            float(trades_pnl.mean()),
+            "std_pts",
+            float(trades_pnl.std()),
+        )
+    else:
+        print("No trades; exiting.")
+        return
+
+    pnl_df = pd.DataFrame({"date": trades_date, "pnl": trades_pnl})
     pnl_df["date"] = pd.to_datetime(pnl_df["date"])
     by_day = pnl_df.groupby("date")["pnl"].sum()
     mean_daily = by_day.mean()
     std_daily = by_day.std()
     sharpe_daily = mean_daily / std_daily if std_daily > 0 else np.nan
     sharpe_annual = sharpe_daily * np.sqrt(252) if std_daily > 0 else np.nan
-    print("amp-model days_with_trades", len(by_day))
-    print("amp-model mean_daily_pts", float(mean_daily), "std_daily_pts", float(std_daily))
-    print("amp-model daily_sharpe", float(sharpe_daily), "annualized_sharpe", float(sharpe_annual))
+
+    print("swing-model days_with_trades", len(by_day))
+    print("swing-model mean_daily_pts", float(mean_daily), "std_daily_pts", float(std_daily))
+    print("swing-model daily_sharpe", float(sharpe_daily), "annualized_sharpe", float(sharpe_annual))
 
     # Per-year Sharpe
     pnl_df["year"] = pnl_df["date"].dt.year
-    print("\nPer-year Sharpe (amp-model, close-to-close horizon):")
+    print("\nPer-year Sharpe (swing-model, ATR bracket, no cost):")
     for year, grp in pnl_df.groupby("year"):
         by_day_y = grp.groupby("date")["pnl"].sum()
         m = by_day_y.mean()

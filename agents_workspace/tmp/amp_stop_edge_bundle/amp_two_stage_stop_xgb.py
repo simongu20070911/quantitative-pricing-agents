@@ -329,14 +329,7 @@ def main():
     print("\nNaive triple-barrier backtest using Stop model (with amp p), cost=0:")
     print("  trades_used", len(pnls))
     if len(pnls) > 0:
-        mean_pnl = float(pnls.mean())
-        std_pnl = float(pnls.std())
-        win_frac = float((pnls > 0).mean())
-        loss_frac = float((pnls < 0).mean())
-        flat_frac = float((pnls == 0).mean())
-        print("  per-trade mean_pts", mean_pnl, "std_pts", std_pnl)
-        print("  trade win/loss/flat fractions:", win_frac, loss_frac, flat_frac)
-
+        print("  per-trade mean_pts", float(pnls.mean()), "std_pts", float(pnls.std()))
         pnl_df = pd.DataFrame({"date": trade_dates, "pnl": pnls})
         pnl_df["date"] = pd.to_datetime(pnl_df["date"])
         by_day = pnl_df.groupby("date")["pnl"].sum()
@@ -347,15 +340,6 @@ def main():
         print("  days_with_trades", len(by_day))
         print("  mean_daily_pts", mean_daily, "std_daily_pts", std_daily)
         print("  daily_sharpe", sharpe_daily, "annualized_sharpe", sharpe_annual)
-
-        # Build equity curves and save for plotting.
-        pnl_df_sorted = pnl_df.sort_values("date").reset_index(drop=True)
-        pnl_df_sorted["cum_pnl"] = pnl_df_sorted["pnl"].cumsum()
-        daily_equity = by_day.sort_index().to_frame(name="daily_pnl")
-        daily_equity["cum_pnl"] = daily_equity["daily_pnl"].cumsum()
-
-        pnl_df_sorted.to_csv("tmp/stop_trades_equity_extreme.csv", index=False)
-        daily_equity.to_csv("tmp/stop_daily_equity_extreme.csv")
 
 
 if __name__ == "__main__":

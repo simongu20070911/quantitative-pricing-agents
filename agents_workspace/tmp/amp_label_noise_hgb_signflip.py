@@ -98,16 +98,16 @@ def build_features(df: pd.DataFrame, num_means=None):
 
 
 def main():
-    HORIZON = 10
-
-    ml = pd.read_csv("ml_export_es_new.csv", low_memory=False)
+    ml = pd.read_csv("ml_export_noise_3m.csv", low_memory=False)
     ml = ml[ml["label_amp"].isin(["up", "down"])].copy()
+    ml["y"] = (ml["label_amp"] == "up").astype(int)
 
-    train_df = ml[ml["split"] == "train"].copy()
-    test_df = ml[ml["split"] == "test"].copy()
-
-    train_df["y"] = (train_df["label_amp"] == "up").astype(int)
-    test_df["y"] = (test_df["label_amp"] == "up").astype(int)
+    train_df = ml[ml["split"] == "train"].copy().sort_values(["date", "time"]).reset_index(
+        drop=True
+    )
+    test_df = ml[ml["split"] == "test"].copy().sort_values(["date", "time"]).reset_index(
+        drop=True
+    )
 
     X_train_df, num_cols, train_cat_cols, num_means = build_features(train_df)
     X_test_df, _, test_cat_cols, _ = build_features(test_df, num_means=num_means)
@@ -131,8 +131,6 @@ def main():
     y_train = train_df["y"].values
     y_test = test_df["y"].values
 
-    print("Feature shapes train/test:", X_train.shape, X_test.shape)
-
     clf = HistGradientBoostingClassifier(
         loss="log_loss",
         max_depth=3,
@@ -146,79 +144,86 @@ def main():
     )
     clf.fit(X_train, y_train)
 
-    proba_train = clf.predict_proba(X_train)[:, 1]
-    proba_test = clf.predict_proba(X_test)[:, 1]
-    auc_train = roc_auc_score(y_train, proba_train)
-    auc_test = roc_auc_score(y_test, proba_test)
-    print("Amplitude label HGB train AUC:", auc_train)
-    print("Amplitude label HGB test AUC:", auc_test)
+    p_test = clf.predict_proba(X_test)[:, 1]
+    auc_test = roc_auc_score(y_test, p_test)
+    print("Noise HGB amplitude label test AUC:", auc_test)
 
-    # Simple close-to-close payoff over HORIZON bars.
-    raw = pd.read_csv("../es.c.0-20100606-20251116.et.ohlcv-1m.csv")
-    raw["ET_datetime"] = pd.to_datetime(raw["ET_datetime"], utc=True)
-    raw["date_str"] = raw["ET_datetime"].dt.strftime("%Y-%m-%d")
-    raw["time_str"] = raw["ET_datetime"].dt.strftime("%H:%M")
-    raw["minute_of_day"] = raw["ET_datetime"].dt.hour * 60 + raw["ET_datetime"].dt.minute
-    rth_mask = (raw["minute_of_day"] >= 9 * 60 + 30) & (raw["minute_of_day"] <= 16 * 60 + 15)
-    raw = raw[rth_mask].reset_index(drop=True)
+    # Sign-flip always-in strategy on noise using HGB predictions
+    test_df_sorted = test_df.copy()
+    test_df_sorted["p_amp"] = p_test
+    test_df_sorted = test_df_sorted.sort_values(["date", "time"]).reset_index(drop=True)
 
-    key_series = raw["date_str"] + " " + raw["time_str"]
-    index_map = {k: i for i, k in enumerate(key_series)}
-    close = raw["close"].values
-    date_raw = raw["date_str"].values
+    test_df_sorted["state_pred"] = np.where(test_df_sorted["p_amp"] >= 0.5, 1, -1)
 
-    test_df_sorted = test_df.sort_values(["date", "time"]).reset_index(drop=True)
-    X_test_sorted = X_test_df.loc[test_df_sorted.index].values.astype(np.float32)
-    proba_sorted = clf.predict_proba(X_test_sorted)[:, 1]
-    test_df_sorted["p_amp"] = proba_sorted
+    close = pd.to_numeric(
+        test_df_sorted["close"].astype(str).str.replace("_", ""), errors="coerce"
+    ).values
+    dates = test_df_sorted["date"].values
+    states = test_df_sorted["state_pred"].values
 
-    pnls = []
-    dates = []
-    for _, row in test_df_sorted.iterrows():
-        key = f"{row['date']} {row['time']}"
-        i = index_map.get(key)
-        if i is None:
-            continue
-        n = len(close)
-        last_idx = min(n - 1, i + HORIZON)
-        if date_raw[last_idx] != date_raw[i]:
-            continue
-        side = 1.0 if row["p_amp"] >= 0.5 else -1.0
-        entry = close[i]
-        exit_px = close[last_idx]
-        pnl = (exit_px - entry) * side
-        pnls.append(pnl)
-        dates.append(row["date"])
+    n = len(test_df_sorted)
+    state = 0
+    entry_px = None
 
-    pnls = np.array(pnls, dtype=float)
-    print("amp-model trades_used", len(pnls))
-    print("amp-model per-trade mean_pts", float(pnls.mean()), "std_pts", float(pnls.std()))
+    trades_pnl = []
+    trades_date = []
 
-    pnl_df = pd.DataFrame({"date": dates, "pnl": pnls})
+    for j in range(n):
+        d = dates[j]
+        px = close[j]
+        desired = states[j]
+        if desired != state:
+            if state != 0 and entry_px is not None and np.isfinite(px) and np.isfinite(entry_px):
+                pnl = (px - entry_px) * state
+                trades_pnl.append(pnl)
+                trades_date.append(d)
+            if np.isfinite(px):
+                state = desired
+                entry_px = px
+            else:
+                state = 0
+                entry_px = None
+
+    if state != 0 and entry_px is not None and np.isfinite(close[-1]) and np.isfinite(entry_px):
+        pnl = (close[-1] - entry_px) * state
+        trades_pnl.append(pnl)
+        trades_date.append(dates[-1])
+
+    trades_pnl = np.array(trades_pnl, dtype=float)
+    print("Noise HGB signflip trades_used", len(trades_pnl))
+    if len(trades_pnl) == 0:
+        return
+    mean_trade = float(trades_pnl.mean())
+    std_trade = float(trades_pnl.std())
+    print(
+        "Noise HGB signflip per-trade mean_pts",
+        mean_trade,
+        "std_pts",
+        std_trade,
+    )
+
+    # Daily Sharpe on noise
+    pnl_df = pd.DataFrame({"date": trades_date, "pnl": trades_pnl})
     pnl_df["date"] = pd.to_datetime(pnl_df["date"])
     by_day = pnl_df.groupby("date")["pnl"].sum()
-    mean_daily = by_day.mean()
-    std_daily = by_day.std()
-    sharpe_daily = mean_daily / std_daily if std_daily > 0 else np.nan
-    sharpe_annual = sharpe_daily * np.sqrt(252) if std_daily > 0 else np.nan
-    print("amp-model days_with_trades", len(by_day))
-    print("amp-model mean_daily_pts", float(mean_daily), "std_daily_pts", float(std_daily))
-    print("amp-model daily_sharpe", float(sharpe_daily), "annualized_sharpe", float(sharpe_annual))
-
-    # Per-year Sharpe
-    pnl_df["year"] = pnl_df["date"].dt.year
-    print("\nPer-year Sharpe (amp-model, close-to-close horizon):")
-    for year, grp in pnl_df.groupby("year"):
-        by_day_y = grp.groupby("date")["pnl"].sum()
-        m = by_day_y.mean()
-        s = by_day_y.std()
-        if s > 0:
-            sd = m / s
-            sa = sd * np.sqrt(252)
-        else:
-            sd = float("nan")
-            sa = float("nan")
-        print(f"  {year}: days={len(by_day_y)}, mean_daily={m:.3f}, std_daily={s:.3f}, ann_sharpe={sa:.3f}")
+    mean_daily = float(by_day.mean())
+    std_daily = float(by_day.std())
+    sharpe_daily = mean_daily / std_daily if std_daily > 0 else float("nan")
+    sharpe_annual = sharpe_daily * np.sqrt(252) if std_daily > 0 else float("nan")
+    print(
+        "Noise HGB signflip days_with_trades",
+        len(by_day),
+        "mean_daily_pts",
+        mean_daily,
+        "std_daily_pts",
+        std_daily,
+    )
+    print(
+        "Noise HGB signflip daily_sharpe",
+        sharpe_daily,
+        "annualized_sharpe",
+        sharpe_annual,
+    )
 
 
 if __name__ == "__main__":
